@@ -51,10 +51,6 @@ class ProviderService {
 		$this->providerMapper = $providerMapper;
 	}
 
-	public function getProvidersNoSettings(): array {
-		return $this->providerMapper->getProviders();
-	}
-
 	public function getProvidersWithSettings(): array {
 		$providers = $this->providerMapper->getProviders();
 		return array_map(function ($provider) {

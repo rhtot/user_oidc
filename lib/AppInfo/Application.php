@@ -28,6 +28,9 @@ namespace OCA\UserOIDC\AppInfo;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Service\ID4MeService;
 use OCA\UserOIDC\Service\SettingsService;
+use OCA\UserOIDC\Service\OIDCService;
+use OCA\UserOIDC\Service\ProviderService;
+use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\User\Backend;
 use OCP\AppFramework\App;
 use OCP\IL10N;
@@ -51,6 +54,18 @@ class Application extends App {
 		/** @var IUserManager $userManager */
 		$userManager = $this->getContainer()->query(IUserManager::class);
 
+		/** @var ProviderMapper $providerMapper */
+		$providerMapper = $this->getContainer()->query(ProviderMapper::class);
+
+		/** @var ProviderService $providerService */
+		$providerService = $this->getContainer()->query(ProviderService::class);
+
+		/** @var UserService $userService */
+		$userService = $this->getContainer()->query(UserService::class);
+
+		/** @var OIDCService $oidcService */
+		$oidcService = $this->getContainer()->query(OIDCService::class);
+
 		/* Register our own user backend */
 		$backend = $this->getContainer()->query(Backend::class);
 		$userManager->registerBackend($backend);
@@ -61,8 +76,6 @@ class Application extends App {
 			/** @var IURLGenerator $urlGenerator */
 			$urlGenerator = $this->getContainer()->query(IURLGenerator::class);
 
-			/** @var ProviderMapper $providerMapper */
-			$providerMapper = $this->getContainer()->query(ProviderMapper::class);
 			$providers = $providerMapper->getProviders();
 
 			/** @var IL10N $l10n */
