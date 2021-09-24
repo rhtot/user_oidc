@@ -26,6 +26,8 @@ declare(strict_types=1);
 namespace OCA\UserOIDC\User;
 
 use OCA\UserOIDC\Service\ProviderService;
+use OCA\UserOIDC\Service\OIDCService;
+use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
 use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
@@ -43,7 +45,7 @@ use Psr\Log\LoggerInterface;
 class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisplayNameBackend, IApacheBackend {
 	private $tokenValidators = [
 		SelfEncodedValidator::class,
-		UserInfoValidator::class,
+		//UserInfoValidator::class,
 	];
 
 	/** @var UserMapper */
@@ -54,21 +56,27 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	private $request;
 	/** @var ProviderMapper */
 	private $providerMapper;
-	/**
-	 * @var ProviderService
-	 */
+	/** @var ProviderService */
 	private $providerService;
+	/** @var OIDCService */
+	private $oidcService;
+	/** @var UserService */
+	private $userService;
 
 	public function __construct(UserMapper $userMapper,
 								LoggerInterface $logger,
 								IRequest $request,
 								ProviderMapper $providerMapper,
-								ProviderService $providerService) {
+								ProviderService $providerService,
+								OIDCService $oidcService,
+								UserService $userService) {
 		$this->userMapper = $userMapper;
 		$this->logger = $logger;
 		$this->request = $request;
 		$this->providerMapper = $providerMapper;
 		$this->providerService = $providerService;
+		$this->oidcService = $oidcService;
+		$this->userService = $userService;
 	}
 
 	public function getBackendName(): string {
@@ -144,20 +152,11 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	 * @since 6.0.0
 	 */
 	public function getCurrentUserId() {
-		// get the first provider
-		// TODO make sure this fits our needs and there never is more than one provider
-		$providers = $this->providerMapper->getProviders();
-		if (count($providers) > 0) {
-			$provider = $providers[0];
-		} else {
-			$this->logger->error('no OIDC providers');
-			return '';
-		}
-
-		if ($this->providerService->getSetting($provider->getId(), ProviderService::SETTING_CHECK_BEARER, '0') !== '1') {
-			$this->logger->debug('Bearer token check is disabled for provider ' . $provider->getId());
-			return '';
-		}
+		// TODO: this option makes only sense global or not
+		// if ($this->providerService->getSetting($provider->getId(), ProviderService::SETTING_CHECK_BEARER, '0') !== '1') {
+		//	$this->logger->debug('Bearer token check is disabled for provider ' . $provider->getId());
+		//	return '';
+		//}
 
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
@@ -166,6 +165,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 			$this->logger->error('No Bearer token');
 			return '';
 		}
+
+
 
 		$userId = null;
 		// find user id through different token validation methods

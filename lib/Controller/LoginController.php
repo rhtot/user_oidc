@@ -31,6 +31,9 @@ use OCA\UserOIDC\Event\AttributeMappedEvent;
 use OCA\UserOIDC\Event\TokenObtainedEvent;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\ProviderService;
+use OCA\UserOIDC\Service\OIDCService;
+use OCA\UserOIDC\Service\UserService;
+use OCA\UserOIDC\Service\InvalidTokenException;
 use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
@@ -39,7 +42,6 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
-use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Http\Client\IClientService;
 use OCP\ILogger;
@@ -77,14 +79,8 @@ class LoginController extends Controller {
 	/** @var IUserManager */
 	private $userManager;
 
-	/** @var ITimeFactory */
-	private $timeFactory;
-
 	/** @var ProviderMapper */
 	private $providerMapper;
-
-	/** @var IEventDispatcher */
-	private $eventDispatcher;
 
 	/** @var ILogger */
 	private $logger;
@@ -95,11 +91,15 @@ class LoginController extends Controller {
 	/** @var DiscoveryService */
 	private $discoveryService;
 
+	/** @var OIDCService */
+	private $userInfoService;
+	
 	public function __construct(
 		IRequest $request,
 		ProviderMapper $providerMapper,
 		ProviderService $providerService,
 		DiscoveryService $discoveryService,
+		OIDCService $oidcService,
 		ISecureRandom $random,
 		ISession $session,
 		IClientService $clientService,
@@ -107,7 +107,6 @@ class LoginController extends Controller {
 		UserMapper $userMapper,
 		IUserSession $userSession,
 		IUserManager $userManager,
-		ITimeFactory $timeFactory,
 		IEventDispatcher $eventDispatcher,
 		ILogger $logger
 	) {
@@ -117,11 +116,11 @@ class LoginController extends Controller {
 		$this->session = $session;
 		$this->clientService = $clientService;
 		$this->discoveryService = $discoveryService;
+		$this->oidcService =$oidcService;
 		$this->urlGenerator = $urlGenerator;
 		$this->userMapper = $userMapper;
 		$this->userSession = $userSession;
 		$this->userManager = $userManager;
-		$this->timeFactory = $timeFactory;
 		$this->providerMapper = $providerMapper;
 		$this->providerService = $providerService;
 		$this->eventDispatcher = $eventDispatcher;
@@ -266,39 +265,19 @@ class LoginController extends Controller {
 		$jwks = $this->discoveryService->obtainJWK($provider);
 		JWT::$leeway = 60;
 		$payload = JWT::decode($data['id_token'], $jwks, array_keys(JWT::$supported_algs));
-
 		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
-
-		if ($payload->exp < $this->timeFactory->getTime()) {
-			$this->logger->debug('Token expired');
-			// TODO: error properly
-			return new JSONResponse(['token expired']);
-		}
-
-		// Verify audience
-		if (!(($payload->aud === $provider->getClientId() || in_array($provider->getClientId(), $payload->aud, true)))) {
-			$this->logger->debug('This token is not for us');
-			// TODO: error properly
-			return new JSONResponse(['audience does not match']);
-		}
 
 		if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
 			$this->logger->debug('Nonce does not match');
 			// TODO: error properly
-			return new JSONResponse(['invalid nonce']);
+			return new JSONResponse(['invalid nonce'], Http::STATUS_UNAUTHORIZED);
 		}
 
-		// get attribute mapping settings
-		$uidAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_UID, 'sub');
-		$emailAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_EMAIL, 'email');
-		$displaynameAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'name');
-		$quotaAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_QUOTA, 'quota');
-
-		// try to get id/name/email information from the token itself
-		$userId = $payload->{$uidAttribute} ?? null;
-		$userName = $payload->{$displaynameAttribute} ?? null;
-		$email = $payload->{$emailAttribute} ?? null;
-		$quota = $payload->{$quotaAttribute} ?? null;
+		try {
+			$this->oidcService->verifyToken($provider, $payload); 
+		} catch (InvalidTokenException $eInvalid) {
+			return new JSONResponse($eInvalid->getMessage(), Http::STATUS_UNAUTHORIZED);
+		}
 
 		// NextMagentaCloud: at the moment not a good idea for SAM3
 		// if something is missing from the token, get user info from /userinfo endpoint
@@ -316,60 +295,19 @@ class LoginController extends Controller {
 		// 	$quota = $quota ?? $userInfoResult[$quotaAttribute] ?? null;
 		// }
 
-		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_UID, $payload, $userId);
-		$this->eventDispatcher->dispatchTyped($event);
-		if (!$event->hasValue()) {
-			return new JSONResponse($payload);
+		try {
+			$userData = $this->userService->userFromToken($providerId, $payload);
+			$user = $userData['userAccount'];
+		} catch (AttributeValueException $eAttribute) {
+			return new JSONResponse($eAttribute->getMessage(), Http::STATUS_NOT_ACCEPTABLE);
 		}
 
-		$backendUser = $this->userMapper->getOrCreate($providerId, $event->getValue());
-		$this->logger->debug('User obtained: ' . $backendUser->getUserId());
-
-		$user = $this->userManager->get($backendUser->getUserId());
-		if ($user === null) {
-			return new JSONResponse(['Failed to provision user']);
-		}
-
-		// Update displayname
-		if (isset($userName)) {
-			$newDisplayName = mb_substr($userName, 0, 255);
-			$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_DISPLAYNAME, $payload, $newDisplayName);
-		} else {
-			$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_DISPLAYNAME, $payload);
-		}
-		$this->eventDispatcher->dispatchTyped($event);
-		$this->logger->debug('Displayname dispatched');
-		if ($event->hasValue()) {
-			$newDisplayName = $event->getValue();
-			if ($newDisplayName != $backendUser->getDisplayName()) {
-				$backendUser->setDisplayName($newDisplayName);
-				$backendUser = $this->userMapper->update($backendUser);
-			}
-		}
-
-		// Update e-mail
-		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_EMAIL, $payload, $email);
-		$this->eventDispatcher->dispatchTyped($event);
-		$this->logger->debug('Email dispatched');
-		if ($event->hasValue()) {
-			$user->setEMailAddress($event->getValue());
-		}
-
-		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_QUOTA, $payload, $quota);
-		$this->eventDispatcher->dispatchTyped($event);
-		$this->logger->debug('Quota dispatched');
-		if ($event->hasValue()) {
-			$user->setQuota($event->getValue());
-		}
-
-		$this->logger->debug('Logging user in');
-
+		$this->logger->debug('Complete user login, make session');	
 		$this->userSession->setUser($user);
 		$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
 		$this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
 
 		$this->logger->debug('Redirecting user');
-
 		$redirectUrl = $this->session->get(self::REDIRECT_AFTER_LOGIN);
 		if ($redirectUrl) {
 			return new RedirectResponse($redirectUrl);
