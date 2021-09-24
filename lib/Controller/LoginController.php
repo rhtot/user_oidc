@@ -267,6 +267,7 @@ class LoginController extends Controller {
 		$payload = JWT::decode($data['id_token'], $jwks, array_keys(JWT::$supported_algs));
 		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
 
+		// the nonce is used to associate the token to the previous redirect
 		if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
 			$this->logger->debug('Nonce does not match');
 			// TODO: error properly

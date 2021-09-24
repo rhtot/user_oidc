@@ -51,15 +51,11 @@ class UserService {
 	/** @var ProviderService */
 	private $providerService;
 
-	public function __construct(
-		IEventDispatcher $eventDispatcher,
-		ILogger $logger,
-		UserMapper $userMapper,
-		IUserManager $userManager,
-        ProviderService $providerService
-	) {
-		parent::__construct(Application::APP_ID, $request);
-
+	public function __construct(IEventDispatcher $eventDispatcher,
+		                        ILogger $logger,
+		                        UserMapper $userMapper,
+		                        IUserManager $userManager,
+                                ProviderService $providerService ) {
 		$this->eventDispatcher = $eventDispatcher;
 		$this->logger = $logger;
 		$this->userMapper = $userMapper;
@@ -143,9 +139,10 @@ class UserService {
 			$user->setQuota($quota);
 		}
     
-		return array (
-			'userBackend' => $backendUser, 
-			'userAccount' => $user
-		);
+		return $user->getUID();
+		//return array (
+		//	"userBackend" => $backendUser, 
+		//	"userAccount" => $user
+		//);
 	}
 }

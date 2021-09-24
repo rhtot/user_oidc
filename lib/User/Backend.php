@@ -43,11 +43,6 @@ use OCP\User\Backend\IPasswordConfirmationBackend;
 use Psr\Log\LoggerInterface;
 
 class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisplayNameBackend, IApacheBackend {
-	private $tokenValidators = [
-		SelfEncodedValidator::class,
-		//UserInfoValidator::class,
-	];
-
 	/** @var UserMapper */
 	private $userMapper;
 	/** @var LoggerInterface */
@@ -68,7 +63,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 								IRequest $request,
 								ProviderMapper $providerMapper,
 								ProviderService $providerService,
-								OIDCService $oidcService,
+								//OIDCService $oidcService,
 								UserService $userService) {
 		$this->userMapper = $userMapper;
 		$this->logger = $logger;
@@ -160,29 +155,33 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
-		$headerToken = preg_replace('/^bearer\s+/i', '', $headerToken);
-		if ($headerToken === '') {
-			$this->logger->error('No Bearer token');
+		$bearerToken = preg_replace('/^bearer\s+/i', '', $headerToken);
+		if ($bearerToken === '') {
+			$this->logger->warning('Autorisation header without bearer token received');
+			return '';
+		}
+		
+		// try to decode the bearer token
+		JWT::$leeway = 60;
+		try {
+			$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));
+		} catch (Throwable $e) {
+			$this->logger->error('Impossible to decode OIDC token:' . $e->getMessage());
 			return '';
 		}
 
-
-
-		$userId = null;
-		// find user id through different token validation methods
-		foreach ($this->tokenValidators as $validatorClass) {
-			$validator = \OC::$server->get($validatorClass);
-			$userId = $validator->isValidBearerToken($provider, $headerToken);
-			if ($userId) {
-				break;
-			}
+		$provider = null;
+		try {
+			$provider = $this->oidcService->verifyToken($provider, $payload); 
+		} catch (InvalidTokenException $eInvalid) {
+			$this->logger->error("Invalid access token:" . $eInvalid->getMessage());
 		}
 
-		if ($userId === null) {
-			$this->logger->error('Could not find unique token validation');
+		try {
+			return $this->userService->userFromToken($provider->getIdentifier(), $payload);
+		} catch (AttributeValueException $eAttribute) {
+			$this->logger->error('Invalid access token claims:' . $eAttribute->getMessage());
 			return '';
 		}
-		$backendUser = $this->userMapper->getOrCreate($provider->getId(), $userId);
-		return $backendUser->getUserId();
 	}
 }
