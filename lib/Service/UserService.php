@@ -63,16 +63,16 @@ class UserService {
 		$this->providerService = $providerService;
 	}
 
-	protected function determineUID(string $providerid, object $payload) {
-		$uidAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_UID, 'sub');
+	protected function determineUID(int $providerid, object $payload) {
+		$uidAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_UID, 'sub');
 		$mappedUserId = $payload->{$uidAttribute} ?? null;
 		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_UID, $payload, $mappedUserId);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
 	} 
 
-	protected function determineDisplayname(string $providerid, object $payload) {
-		$displaynameAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'name');
+	protected function determineDisplayname(int $providerid, object $payload) {
+		$displaynameAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'name');
 		$mappedDisplayName = $payload->{$displaynameAttribute} ?? null;
 
 		if (isset($mappedDisplayName)) {
@@ -85,16 +85,16 @@ class UserService {
 		return $event->getValue();
 	} 
 
-	protected function determineEmail(string $providerid, object $payload) {
-		$emailAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_EMAIL, 'email');
+	protected function determineEmail(int $providerid, object $payload) {
+		$emailAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_EMAIL, 'email');
 		$mappedEmail = $payload->{$emailAttribute} ?? null;
 		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_EMAIL, $payload, $email);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
 	} 
 
-	protected function determineQuota(string $providerid, object $payload) {
-		$quotaAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_QUOTA, 'quota');
+	protected function determineQuota(int $providerid, object $payload) {
+		$quotaAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_QUOTA, 'quota');
 		$mappedQuota = $payload->{$quotaAttribute} ?? null;
 		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_QUOTA, $payload, $quota);
 		$this->eventDispatcher->dispatchTyped($event);
@@ -107,8 +107,8 @@ class UserService {
 	 * create OIDC user if not existing,
 	 * update user fields in case of a change
 	 */	
-    public function userFromToken(string $providerId, object $payload) : array {
-		$uid = determineUID($providerId, $payload);
+    public function userFromToken(int $providerId, object $payload) : object {
+		$uid = $this->determineUID($providerId, $payload);
 		if (is_null($uid)) {
 			throw new AttributeValueException("cannot determine userId from token"); 
 		}
@@ -120,26 +120,26 @@ class UserService {
 			throw new AttributeValueException("backend user without associated account found"); 
 		}
 
-		$displayName = determineDisplayname($providerId, $payload);
+		$displayName = $this->determineDisplayname($providerId, $payload);
 		if (isset($displayName) && ($displayName != $backendUser->getDisplayName())) {
 			// only modify on change
 			$backendUser->setDisplayName($newDisplayName);
 			$backendUser = $this->userMapper->update($backendUser);
 		}
 
-		$email = determineEmail($providerId, $payload);
+		$email = $this->determineEmail($providerId, $payload);
 		if (isset($email) && ($email != $user->getEMailAddress())) {
 			// only modify on change
 			$user->setEMailAddress($email);
 		}
 
-		$quota = determineQuota($providerId, $payload);
+		$quota = $this->determineQuota($providerId, $payload);
 		if (isset($quota) && ($quota != $user->getQuota())) {
 			// only modify on change
 			$user->setQuota($quota);
 		}
     
-		return $user->getUID();
+		return $user;
 		//return array (
 		//	"userBackend" => $backendUser, 
 		//	"userAccount" => $user

@@ -88,6 +88,9 @@ class LoginController extends Controller {
 	/** @var ProviderService */
 	private $providerService;
 
+	/** @var UserService */
+	private $userService;
+
 	/** @var DiscoveryService */
 	private $discoveryService;
 
@@ -98,6 +101,7 @@ class LoginController extends Controller {
 		IRequest $request,
 		ProviderMapper $providerMapper,
 		ProviderService $providerService,
+		UserService $userService,
 		DiscoveryService $discoveryService,
 		OIDCService $oidcService,
 		ISecureRandom $random,
@@ -115,6 +119,7 @@ class LoginController extends Controller {
 		$this->random = $random;
 		$this->session = $session;
 		$this->clientService = $clientService;
+		$this->userService = $userService;
 		$this->discoveryService = $discoveryService;
 		$this->oidcService =$oidcService;
 		$this->urlGenerator = $urlGenerator;
@@ -147,12 +152,6 @@ class LoginController extends Controller {
 
 		$this->session->set(self::PROVIDERID, $providerId);
 		$this->session->close();
-
-		// get attribute mapping settings
-		$uidAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_UID, 'sub');
-		$emailAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_EMAIL, 'email');
-		$displaynameAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'name');
-		$quotaAttribute = $this->providerService->getSetting($providerId, ProviderService::SETTING_MAPPING_QUOTA, 'quota');
 
 		$data = [
 			'client_id' => $provider->getClientId(),
@@ -188,6 +187,7 @@ class LoginController extends Controller {
 			'state' => $state,
 			'nonce' => $nonce,
 		];
+
 		// pass discovery query parameters also on to the authentication
 		// $discoveryUrl = parse_url($provider->getDiscoveryEndpoint());
 		// if (isset($discoveryUrl["query"])) {
@@ -240,7 +240,6 @@ class LoginController extends Controller {
 		$provider = $this->providerMapper->getProvider($providerId);
 
 		$discovery = $this->discoveryService->obtainDiscovery($provider);
-
 		$this->logger->debug('Obtainting data from: ' . $discovery['token_endpoint']);
 
 		$client = $this->clientService->newClient();
@@ -297,8 +296,7 @@ class LoginController extends Controller {
 		// }
 
 		try {
-			$userData = $this->userService->userFromToken($providerId, $payload);
-			$user = $userData['userAccount'];
+			$user = $this->userService->userFromToken($providerId, $payload);
 		} catch (AttributeValueException $eAttribute) {
 			return new JSONResponse($eAttribute->getMessage(), Http::STATUS_NOT_ACCEPTABLE);
 		}

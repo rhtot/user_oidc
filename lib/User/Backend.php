@@ -178,7 +178,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		}
 
 		try {
-			return $this->userService->userFromToken($provider->getIdentifier(), $payload);
+			$user = $this->userService->userFromToken($provider->getIdentifier(), $payload);
+			return $user->getUID();
 		} catch (AttributeValueException $eAttribute) {
 			$this->logger->error('Invalid access token claims:' . $eAttribute->getMessage());
 			return '';
