@@ -25,8 +25,11 @@ declare(strict_types=1);
 
 namespace OCA\UserOIDC\Service;
 
-use OCA\UserOIDC\Db\Provider;
 use OCP\Http\Client\IClientService;
+use OCP\AppFramework\Utility\ITimeFactory;
+
+use OCA\UserOIDC\ProviderService;
+use OCA\UserOIDC\Db\Provider;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -38,10 +41,21 @@ class OIDCService {
 	/** @var IClientService */
 	private $clientService;
 
-	public function __construct(DiscoveryService $discoveryService, LoggerInterface $logger, IClientService $clientService) {
+	/** @var ITimeFactory */
+	private $timeFactory;
+
+	/** @var ProviderService */
+	private $providerService;
+
+	public function __construct(DiscoveryService $discoveryService, LoggerInterface $logger, 
+								IClientService $clientService,
+								ITimeFactory $timeFactory,
+								ProviderService $providerService) {
 		$this->discoveryService = $discoveryService;
 		$this->logger = $logger;
 		$this->clientService = $clientService;
+		$this->timeFactory = $timeFactory;
+		$this->providerService = $providerService;
 	}
 
 	public function userinfo(Provider $provider, string $accessToken): array {
@@ -85,5 +99,29 @@ class OIDCService {
 		} catch (Throwable $e) {
 			return [];
 		}
+	}
+
+	public function verifyToken(object $payload){
+		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
+
+		if ($payload->exp < $this->timeFactory->getTime()) {
+			$this->logger->debug('Token expired');
+			throw new InvalidTokenException(['token expired']);
+		}
+
+		$providers = $this->providerService->getProvidersNoSettings();
+		foreach($providers as $provider) {
+			// check all providers to verify audience
+			$clientId = $provider->getClientId(); 
+			if (($payload->aud === $clientId || in_array($clientId, $payload->aud, true))) {
+				// the first matching provider from list is applied, not all matching ones
+				// I think this is ok as I cannot think of a scenario where multiple matches
+				// can occur
+				return $this->providerService->getProviderWithSettings($provider->getIdentifier());
+			}
+		}
+
+		$this->logger->debug('This token is not for us');
+		throw new InvalidTokenException(['audience does not match']);
 	}
 }
