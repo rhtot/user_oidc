@@ -164,9 +164,10 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// try to decode the bearer token
 		JWT::$leeway = 60;
 		try {
+			// TODO: store JWK at provider to avoid unneccessary roundtrips
 			$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));
 		} catch (Throwable $e) {
-			$this->logger->error('Impossible to decode OIDC token:' . $e->getMessage());
+			$this->logger->error('Invalid token (general):' . $e->getMessage());
 			return '';
 		}
 
@@ -174,7 +175,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		try {
 			$provider = $this->oidcService->verifyToken($provider, $payload); 
 		} catch (InvalidTokenException $eInvalid) {
-			$this->logger->error("Invalid access token:" . $eInvalid->getMessage());
+			$this->logger->error("Invalid token (type access):" . $eInvalid->getMessage());
 		}
 
 		try {
