@@ -38,6 +38,8 @@ class DiscoveryService {
 	/** @var IClientService */
 	private $clientService;
 
+	private $cached_jwks = null;
+
 	public function __construct(LoggerInterface $logger, IClientService $clientService) {
 		$this->logger = $logger;
 		$this->clientService = $clientService;
@@ -53,13 +55,24 @@ class DiscoveryService {
 		return json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
 	}
 
+	/**
+	 *  
+	 * Cache once retrieved jwks on each node to speed avoid
+	 * unnneccessary roundtrips for bearer tokens.
+	 * 
+	 * Each compute node will retreive jwks keys once and then only use the
+	 * cached ones.
+	 */
 	public function obtainJWK(Provider $provider): array {
-		$discovery = $this->obtainDiscovery($provider);
-		$client = $this->clientService->newClient();
-		$result = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
-		$jwks = JWK::parseKeySet($result);
 
-		$this->logger->debug('Parsed the jwks');
-		return $jwks;
+		if (is_null($this->cached_jwks)) {
+			$discovery = $this->obtainDiscovery($provider);
+			$client = $this->clientService->newClient();
+			$result = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
+			$this->cached_jwks = JWK::parseKeySet($result);	
+			$this->logger->debug('Parsed the jwks');
+		}
+
+		return $this->cached_jwks;
 	}
 }

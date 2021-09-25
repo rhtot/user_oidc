@@ -33,6 +33,7 @@ use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\UserMapper;
+use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\Authentication\IApacheBackend;
 use OCP\DB\Exception;
@@ -57,14 +58,17 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	private $oidcService;
 	/** @var UserService */
 	private $userService;
+	/** @var DiscoveryService */
+	private $discoveryService;
 
 	public function __construct(UserMapper $userMapper,
 								LoggerInterface $logger,
 								IRequest $request,
 								ProviderMapper $providerMapper,
 								ProviderService $providerService,
-								//OIDCService $oidcService,
-								UserService $userService) {
+								OIDCService $oidcService,
+								UserService $userService,
+								DiscoveryService $discoveryService) {
 		$this->userMapper = $userMapper;
 		$this->logger = $logger;
 		$this->request = $request;
@@ -72,6 +76,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$this->providerService = $providerService;
 		$this->oidcService = $oidcService;
 		$this->userService = $userService;
+		$this->discoveryService = $discoveryService;
 	}
 
 	public function getBackendName(): string {
