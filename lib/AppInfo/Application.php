@@ -31,6 +31,7 @@ use OCA\UserOIDC\Service\SettingsService;
 use OCA\UserOIDC\Service\OIDCService;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
+use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\User\Backend;
 use OCP\AppFramework\App;
 use OCP\IL10N;
@@ -56,6 +57,9 @@ class Application extends App {
 
 		/** @var ProviderMapper $providerMapper */
 		$providerMapper = $this->getContainer()->query(ProviderMapper::class);
+
+		/** @var DiscoveryService $discoveryService */
+		$discoveryService = $this->getContainer()->query(DiscoveryService::class);
 
 		/** @var ProviderService $providerService */
 		$providerService = $this->getContainer()->query(ProviderService::class);

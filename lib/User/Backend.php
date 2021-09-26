@@ -28,6 +28,7 @@ namespace OCA\UserOIDC\User;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\OIDCService;
 use OCA\UserOIDC\Service\UserService;
+use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
 use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
@@ -136,7 +137,9 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// if this returns true, getCurrentUserId is called
 		// not sure if we should rather to the validation in here as otherwise it might fail for other backends or bave other side effects
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
-		return $headerToken !== '';
+		// Authorisation is also send for other tokens, so make sure the handling here only goes for bearer
+		//return $headerToken !== '';
+		return preg_match('/^bearer\s+/i', $headerToken);
 	}
 
 	/**
