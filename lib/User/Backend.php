@@ -26,7 +26,6 @@ declare(strict_types=1);
 namespace OCA\UserOIDC\User;
 
 use OCA\UserOIDC\Service\ProviderService;
-use OCA\UserOIDC\Service\OIDCService;
 use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
@@ -35,6 +34,7 @@ use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\UserMapper;
 use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
+use OCA\UserOIDC\Vendor\Firebase\JWT\SignatureInvalidException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\Authentication\IApacheBackend;
 use OCP\DB\Exception;
@@ -55,8 +55,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	private $providerMapper;
 	/** @var ProviderService */
 	private $providerService;
-	/** @var OIDCService */
-	private $oidcService;
 	/** @var UserService */
 	private $userService;
 	/** @var DiscoveryService */
@@ -67,7 +65,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 								IRequest $request,
 								ProviderMapper $providerMapper,
 								ProviderService $providerService,
-								OIDCService $oidcService,
 								UserService $userService,
 								DiscoveryService $discoveryService) {
 		$this->userMapper = $userMapper;
@@ -75,7 +72,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$this->request = $request;
 		$this->providerMapper = $providerMapper;
 		$this->providerService = $providerService;
-		$this->oidcService = $oidcService;
 		$this->userService = $userService;
 		$this->discoveryService = $discoveryService;
 	}
@@ -139,7 +135,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		// Authorisation is also send for other tokens, so make sure the handling here only goes for bearer
 		//return $headerToken !== '';
-		return preg_match('/^bearer\s+/i', $headerToken);
+		return preg_match('/^\s*bearer\s+/i', $headerToken);
 	}
 
 	/**
@@ -163,35 +159,59 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
-		$bearerToken = preg_replace('/^bearer\s+/i', '', $headerToken);
+		$bearerToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
 		if ($bearerToken === '') {
 			$this->logger->warning('Autorisation header without bearer token received');
 			return '';
 		}
-		
-		// try to decode the bearer token
+
 		JWT::$leeway = 60;
-		try {
-			// TODO: store JWK at provider to avoid unneccessary roundtrips
-			$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));
-		} catch (Throwable $e) {
-			$this->logger->error('Invalid token (general):' . $e->getMessage());
-			return '';
+		foreach ($this->providerMapper->getProviders() as $provider) {
+			// try to decode the bearer token
+			try {
+				$this->logger->debug('Bearer access token=' . $bearerToken);
+				$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));	
+				$this->logger->debug('Bearer access payload=');
+		        // JWT decode has already done the following steps
+		        // @throws DomainException              Algorithm was not provided
+		        // @throws UnexpectedValueException     Provided JWT was invalid
+		        // @throws SignatureInvalidException    Provided JWT was invalid because the signature verification failed
+		        // @throws BeforeValidException         Provided JWT is trying to be used before it's eligible as defined by 'nbf'
+		        // @throws BeforeValidException         Provided JWT is trying to be used before it's been created as defined by 'iat'
+		        // @throws ExpiredException             Provided JWT has since expired, as defined by the 'exp' claim
+		        //
+		        // For details:
+		        // @see https://github.com/firebase/php-jwt
+
+				$clientId = $provider->getClientId();
+				if ($payload->aud !== $clientId && !in_array($clientId, $payload->aud, true)) {
+					$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
+					return '';
+				}
+	
+				try {
+					$this->logger->error('Decoded bearer token:' . json_encode($payload));
+					$user = $this->userService->userFromToken($provider->getIdentifier(), $payload);
+					$this->logger->error('User ' . $user->getUID() . ' authorized by Bearer');
+					return $user->getUID();
+				} catch (AttributeValueException $eAttribute) {
+					$this->logger->error('Invalid token (access) claims:' . $eAttribute->getMessage());
+					return '';
+				}
+			}
+			// catch (SignatureInvalidException $eSignature) {
+				// only the key seems not to fit, so try the next provider
+			//	$this->logger->debug('Invalid provider key:' . $e->getMessage());
+			//	continue;
+			//} 
+			catch (Throwable $e) {
+				// there is
+				$this->logger->error('Invalid token (general):' . $e->getMessage());
+				return '';
+			}
 		}
 
-		$provider = null;
-		try {
-			$provider = $this->oidcService->verifyToken($provider, $payload); 
-		} catch (InvalidTokenException $eInvalid) {
-			$this->logger->error("Invalid token (type access):" . $eInvalid->getMessage());
-		}
-
-		try {
-			$user = $this->userService->userFromToken($provider->getIdentifier(), $payload);
-			return $user->getUID();
-		} catch (AttributeValueException $eAttribute) {
-			$this->logger->error('Invalid access token claims:' . $eAttribute->getMessage());
-			return '';
-		}
+		$this->logger->error('Invalid token (access): Not matching key found');
+		return '';
 	}
 }

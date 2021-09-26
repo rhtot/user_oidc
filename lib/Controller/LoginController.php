@@ -31,7 +31,6 @@ use OCA\UserOIDC\Event\AttributeMappedEvent;
 use OCA\UserOIDC\Event\TokenObtainedEvent;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\ProviderService;
-use OCA\UserOIDC\Service\OIDCService;
 use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\InvalidTokenException;
 use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
@@ -93,9 +92,6 @@ class LoginController extends Controller {
 
 	/** @var DiscoveryService */
 	private $discoveryService;
-
-	/** @var OIDCService */
-	private $userInfoService;
 	
 	public function __construct(
 		IRequest $request,
@@ -103,7 +99,6 @@ class LoginController extends Controller {
 		ProviderService $providerService,
 		UserService $userService,
 		DiscoveryService $discoveryService,
-		OIDCService $oidcService,
 		ISecureRandom $random,
 		ISession $session,
 		IClientService $clientService,
@@ -121,7 +116,6 @@ class LoginController extends Controller {
 		$this->clientService = $clientService;
 		$this->userService = $userService;
 		$this->discoveryService = $discoveryService;
-		$this->oidcService =$oidcService;
 		$this->urlGenerator = $urlGenerator;
 		$this->userMapper = $userMapper;
 		$this->userSession = $userSession;
@@ -236,6 +230,7 @@ class LoginController extends Controller {
 			], Http::STATUS_FORBIDDEN);
 		}
 
+		// TODO: may remove providerId from session and iterate all providers
 		$providerId = (int)$this->session->get(self::PROVIDERID);
 		$provider = $this->providerMapper->getProvider($providerId);
 
@@ -260,12 +255,20 @@ class LoginController extends Controller {
 		$this->logger->debug('Received code response: ' . json_encode($data, JSON_THROW_ON_ERROR));
 		$this->eventDispatcher->dispatchTyped(new TokenObtainedEvent($data, $provider, $discovery));
 
-		// TODO: proper error handling
-		$jwks = $this->discoveryService->obtainJWK($provider);
-		JWT::$leeway = 60;
-		$payload = JWT::decode($data['id_token'], $jwks, array_keys(JWT::$supported_algs));
-		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
+		$this->logger->debug('id_token=' . $data['id_token']);
 
+		// TODO: proper error handling
+		$payload = JWT::decode($data['id_token'], $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));
+		// JWT decode has already done the following steps
+		// @throws DomainException              Algorithm was not provided
+		// @throws UnexpectedValueException     Provided JWT was invalid
+		// @throws SignatureInvalidException    Provided JWT was invalid because the signature verification failed
+		// @throws BeforeValidException         Provided JWT is trying to be used before it's eligible as defined by 'nbf'
+		// @throws BeforeValidException         Provided JWT is trying to be used before it's been created as defined by 'iat'
+		// @throws ExpiredException             Provided JWT has since expired, as defined by the 'exp' claim
+		//
+		// For details:
+		// @see https://github.com/firebase/php-jwt
 		// the nonce is used to associate the token to the previous redirect
 		if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
 			$this->logger->debug('Nonce does not match');
@@ -273,11 +276,14 @@ class LoginController extends Controller {
 			return new JSONResponse(['invalid nonce'], Http::STATUS_UNAUTHORIZED);
 		}
 
-		try {
-			$this->oidcService->verifyToken($provider, $payload); 
-		} catch (InvalidTokenException $eInvalid) {
-			return new JSONResponse($eInvalid->getMessage(), Http::STATUS_UNAUTHORIZED);
+		$clientId = $provider->getClientId();
+		if ($payload->aud !== $clientId && !in_array($clientId, $payload->aud, true)) {
+			$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
+			return '';
 		}
+
+		// TODO: may also add code_verifier
+ 		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
 
 		// NextMagentaCloud: at the moment not a good idea for SAM3
 		// if something is missing from the token, get user info from /userinfo endpoint
