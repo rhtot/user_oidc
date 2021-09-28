@@ -169,7 +169,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		foreach ($this->providerMapper->getProviders() as $provider) {
 			// try to decode the bearer token
 			try {
-				$this->logger->debug('Bearer access token=' . $bearerToken);
+				$this->logger->debug('Bearer access token(segments=' . count(explode('.', $bearerToken)) . ')=' . $bearerToken);
 				$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));	
 				$this->logger->debug('Bearer access payload=');
 		        // JWT decode has already done the following steps
