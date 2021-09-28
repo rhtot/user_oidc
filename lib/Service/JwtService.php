@@ -116,7 +116,17 @@ class JwtService {
         $samContent = json_decode($jws->getPayload(), false);
         $payload = new class{};
 
-        $payload->
+        // bearer token standard grants
+        $payload->iss = $samContent->iss;
+        $payload->sub = $samContent->sub;
+        $payload->iat = $samContent->iat;
+        $payload->nbf = $samContent->nbf;
+        $payload->exp = $samContent->exp;
+        //$payload->aud = [ $samContent->{''}
+        // remap all the custom claims
+        foreach ($samContent->{'urn:telekom.com:idm:at:attributes'} as $claimKeyValue) {
+            $payload->{'urn:telekom.com:' . $claimKeyValue->name} = $payload->{$claimKeyValue->value};
+        }
     }
 
     public function verifyToken(Provider $provider, string $token) : string {
