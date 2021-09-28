@@ -28,6 +28,7 @@ namespace OCA\UserOIDC\User;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\DiscoveryService;
+use OCA\UserOIDC\Service\JwtService;
 use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
 use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
@@ -59,6 +60,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	private $userService;
 	/** @var DiscoveryService */
 	private $discoveryService;
+	/** @var JwtService */
+	private $jwtService;
 
 	public function __construct(UserMapper $userMapper,
 								LoggerInterface $logger,
@@ -66,7 +69,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 								ProviderMapper $providerMapper,
 								ProviderService $providerService,
 								UserService $userService,
-								DiscoveryService $discoveryService) {
+								DiscoveryService $discoveryService,
+								JwtService $jwtService) {
 		$this->userMapper = $userMapper;
 		$this->logger = $logger;
 		$this->request = $request;
@@ -74,6 +78,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$this->providerService = $providerService;
 		$this->userService = $userService;
 		$this->discoveryService = $discoveryService;
+		$this->jwtService = $jwtService;
 	}
 
 	public function getBackendName(): string {
@@ -159,17 +164,29 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
-		$bearerToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
-		if ($bearerToken === '') {
+		$rawToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
+		if ($rawToken === '') {
 			$this->logger->warning('Autorisation header without bearer token received');
 			return '';
 		}
 
 		JWT::$leeway = 60;
 		foreach ($this->providerMapper->getProviders() as $provider) {
-			// try to decode the bearer token
+			$numSegments = substr_count($rawToken, '.')+1;
+			if ($numSegments>3) {
+				// this could be an encrypted token as it contains more segments
+				$bearerToken = $this->jwtService->decryptToken($provider, $rawToken);
+			} else {
+				$bearerToken = $rawToken;
+			}
+			$this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $bearerToken);
+			
+			$this->jwtService->verifyToken($provider, $bearerToken);
+
+
+			// try to decode the (inner) JWT bearer token
+			// TODO: switch to new library as we need only one for handling
 			try {
-				$this->logger->debug('Bearer access token(segments=' . count(explode('.', $bearerToken)) . ')=' . $bearerToken);
 				$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));	
 				$this->logger->debug('Bearer access payload=');
 		        // JWT decode has already done the following steps
@@ -199,11 +216,11 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 					return '';
 				}
 			}
-			// catch (SignatureInvalidException $eSignature) {
+			catch (SignatureInvalidException $eSignature) {
 				// only the key seems not to fit, so try the next provider
-			//	$this->logger->debug('Invalid provider key:' . $e->getMessage());
-			//	continue;
-			//} 
+				$this->logger->debug('Invalid provider key:' . $e->getMessage());
+				continue;
+			} 
 			catch (Throwable $e) {
 				// there is
 				$this->logger->error('Invalid token (general):' . $e->getMessage());

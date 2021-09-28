@@ -29,6 +29,7 @@ use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Service\ID4MeService;
 use OCA\UserOIDC\Service\SettingsService;
 use OCA\UserOIDC\Service\OIDCService;
+use OCA\UserOIDC\Service\JwtService;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\DiscoveryService;
@@ -69,6 +70,9 @@ class Application extends App {
 
 		/** @var OIDCService $oidcService */
 		$oidcService = $this->getContainer()->query(OIDCService::class);
+
+		/** @var JwtService $jwtService */
+		$jwtService = $this->getContainer()->query(JwtService::class);
 
 		/* Register our own user backend */
 		$backend = $this->getContainer()->query(Backend::class);

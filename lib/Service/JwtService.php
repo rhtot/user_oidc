@@ -1,0 +1,127 @@
+<?php
+/*
+ * @copyright Copyright (c) 2021 Bernd Rederlechner <bernd.rederlechner@t-systems.com>
+ *
+ * @author Bernd Rederlechner <bernd.rederlechner@t-systems.com>
+ *
+ * @license GNU AGPL version 3 or any later version
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+declare(strict_types=1);
+
+namespace OCA\UserOIDC\Service;
+
+use OCP\ILogger;
+use OCA\UserOIDC\Service\ProviderService;
+use OCA\UserOIDC\Db\Provider;
+
+use Jose\Component\Core\AlgorithmManager;
+use Jose\Component\Encryption\Compression\CompressionMethodManager;
+use Jose\Component\Encryption\Compression\Deflate;
+use Jose\Component\Encryption\JWEDecrypter;
+
+use Jose\Component\Core\JWK;
+
+use Jose\Component\Encryption\Algorithm\KeyEncryption\PBES2HS512A256KW;
+use Jose\Component\Encryption\Algorithm\KeyEncryption\RSAOAEP256;
+use Jose\Component\Encryption\Algorithm\KeyEncryption\ECDHESA256KW;
+use Jose\Component\Encryption\Algorithm\ContentEncryption\A256CBCHS512;
+
+
+class JwtService {
+
+    /** @var ILogger */
+	private $logger;
+
+    public function __construct(ILogger $logger,
+                                ProviderService $providerService) {
+        $this->logger = $logger;
+        $this->providerService = $providerService;
+        
+        // The key encryption algorithm manager with the A256KW algorithm.
+        $keyEncryptionAlgorithmManager = new AlgorithmManager([
+            new PBES2HS512A256KW(),
+            new RSAOAEP256(),
+            new ECDHESA256KW() ]);
+        
+        // The content encryption algorithm manager with the A256CBC-HS256 algorithm.
+        $contentEncryptionAlgorithmManager = new AlgorithmManager([
+            new A256CBCHS512(),
+        ]);
+        
+        // The compression method manager with the DEF (Deflate) method.
+        $compressionMethodManager = new CompressionMethodManager([
+            new Deflate(),
+        ]);
+        
+        // We instantiate our JWE Decrypter.
+        $this->jweDecrypter = new JWEDecrypter(
+            $keyEncryptionAlgorithmManager,
+            $contentEncryptionAlgorithmManager,
+            $compressionMethodManager
+        );
+
+        // The serializer manager. We only use the JWE Compact Serialization Mode.
+        $this->serializerManager = new \Jose\Component\Signature\Serializer\JWSSerializerManager([
+            new \Jose\Component\Signature\Serializer\CompactSerializer(),
+            ]);
+
+
+        $this->encryptionSerializerManager = new \Jose\Component\Encryption\Serializer\JWESerializerManager([
+            new \Jose\Component\Encryption\Serializer\CompactSerializer(),
+            ]);
+        
+    }
+    
+    /**
+     * Implement JWE decryption for SAM3 tokens
+     */
+    public function decryptToken(Provider $provider, string $token) : string {
+        // trusted authenticator and myself share the client secret,
+        // so use it is used for encrypted web tokens
+        $clientSecret = JWK::create([
+            'kty' => 'oct',
+            'k' => $provider->getClientSecret()
+            //'k' => 'dzI6nbW4OcNF-AtfxGAmuyz7IpHRudBI0WgGjZWgaRJt6prBn3DARXgUR8NVwKhfL43QBIU2Un3AvCGCHRgY4TbEqhOi8-i98xxmCggNjde4oaW6wkJ2NgM3Ss9SOX9zS3lcVzdCMdum-RwVJ301kbin4UtGztuzJBeg5oVN00MGxjC2xWwyI0tgXVs-zJs5WlafCuGfX1HrVkIf5bvpE0MQCSjdJpSeVao6-RSTYDajZf7T88a2eVjeW31mMAg-jzAWfUrii61T_bYPJFOXW8kkRWoa1InLRdG6bKB9wQs9-VdXZP60Q4Yuj_WZ-lO7qV9AEFrUkkjpaDgZT86w2g',
+        ]);
+
+        // We try to load the token.
+        $jwe = $this->encryptionSerializerManager->unserialize($token);
+        
+        // We decrypt the token. This method does NOT check the header.
+        return $this->jweDecrypter->decryptUsingKey($jwe, $jwk, 0);
+    }
+
+    /**
+     * Get claims (even before verification to access e.g. aud standard field ...)
+     * Transform them in a format compatible with id_token representation.
+     */
+    public function decodeClaims(Provider $provider, string $token) : string {
+        $jws = $this->serializerManager->unserialize($token);
+        $this->logger->debug("Telekom SAM3 access token: " . $jws->getPayload());
+        
+        $samContent = json_decode($jws->getPayload(), false);
+        $payload = new class{};
+
+        $payload->
+    }
+
+    public function verifyToken(Provider $provider, string $token) : string {
+
+        return $payload;
+    }
+
+}
