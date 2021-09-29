@@ -302,7 +302,7 @@ class LoginController extends Controller {
 		// }
 
 		try {
-			$user = $this->userService->userFromToken($providerId, $payload);
+			$user = $this->userService->userFromToken($provider, $payload);
 		} catch (AttributeValueException $eAttribute) {
 			return new JSONResponse($eAttribute->getMessage(), Http::STATUS_NOT_ACCEPTABLE);
 		}
