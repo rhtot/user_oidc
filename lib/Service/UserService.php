@@ -29,6 +29,7 @@ use OCA\UserOIDC\Event\AttributeMappedEvent;
 use OCA\UserOIDC\Service\AttributeValueException;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Db\ProviderMapper;
+use OCA\UserOIDC\Db\Provider;
 use OCA\UserOIDC\Db\UserMapper;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\ILogger;
@@ -72,7 +73,7 @@ class UserService {
 	} 
 
 	protected function determineDisplayname(int $providerid, object $payload) {
-		$displaynameAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'name');
+		$displaynameAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'displayname');
 		$mappedDisplayName = $payload->{$displaynameAttribute} ?? null;
 
 		if (isset($mappedDisplayName)) {
@@ -88,7 +89,7 @@ class UserService {
 	protected function determineEmail(int $providerid, object $payload) {
 		$emailAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_EMAIL, 'email');
 		$mappedEmail = $payload->{$emailAttribute} ?? null;
-		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_EMAIL, $payload, $email);
+		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_EMAIL, $payload, $mappedEmail);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
 	} 
@@ -96,7 +97,7 @@ class UserService {
 	protected function determineQuota(int $providerid, object $payload) {
 		$quotaAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_QUOTA, 'quota');
 		$mappedQuota = $payload->{$quotaAttribute} ?? null;
-		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_QUOTA, $payload, $quota);
+		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_QUOTA, $payload, $mappedQuota);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
 	} 
@@ -107,7 +108,9 @@ class UserService {
 	 * create OIDC user if not existing,
 	 * update user fields in case of a change
 	 */	
-    public function userFromToken(int $providerId, object $payload) : object {
+    public function userFromToken(Provider $provider, object $payload) : object {
+		
+		$providerId = $provider->getId();
 		$uid = $this->determineUID($providerId, $payload);
 		if (is_null($uid)) {
 			throw new AttributeValueException("cannot determine userId from token"); 
@@ -123,7 +126,7 @@ class UserService {
 		$displayName = $this->determineDisplayname($providerId, $payload);
 		if (isset($displayName) && ($displayName != $backendUser->getDisplayName())) {
 			// only modify on change
-			$backendUser->setDisplayName($newDisplayName);
+			$backendUser->setDisplayName($displayName);
 			$backendUser = $this->userMapper->update($backendUser);
 		}
 
