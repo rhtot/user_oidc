@@ -181,14 +181,11 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 			}
 			$this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $bearerToken);
 			
-			$this->jwtService->verifyToken($provider, $bearerToken);
-
-
 			// try to decode the (inner) JWT bearer token
 			// TODO: switch to new library as we need only one for handling
 			try {
-				$payload = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));	
-				$this->logger->debug('Bearer access payload=');
+				//$claims = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));	
+				//$this->logger->debug('Bearer access payload=');
 		        // JWT decode has already done the following steps
 		        // @throws DomainException              Algorithm was not provided
 		        // @throws UnexpectedValueException     Provided JWT was invalid
@@ -200,15 +197,17 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		        // For details:
 		        // @see https://github.com/firebase/php-jwt
 
+				$this->jwtService->verifyToken($provider, $bearerToken);
+				$claims = $this->jwtService->decodeClaims($provider, $bearerToken);
 				$clientId = $provider->getClientId();
-				if ($payload->aud !== $clientId && !in_array($clientId, $payload->aud, true)) {
+				if ($claims->aud !== $clientId && !in_array($clientId, $claims->aud, true)) {
 					$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
 					return '';
 				}
 	
 				try {
-					$this->logger->error('Decoded bearer token:' . json_encode($payload));
-					$user = $this->userService->userFromToken($provider->getIdentifier(), $payload);
+					$this->logger->error('Decoded bearer token: ' . json_encode($claims));
+					$user = $this->userService->userFromToken($provider, $claims);
 					$this->logger->error('User ' . $user->getUID() . ' authorized by Bearer');
 					return $user->getUID();
 				} catch (AttributeValueException $eAttribute) {

@@ -109,29 +109,34 @@ class JwtService {
      * Get claims (even before verification to access e.g. aud standard field ...)
      * Transform them in a format compatible with id_token representation.
      */
-    public function decodeClaims(Provider $provider, string $token) : string {
+    public function decodeClaims(Provider $provider, string $token) : object {
         $jws = $this->serializerManager->unserialize($token);
         $this->logger->debug("Telekom SAM3 access token: " . $jws->getPayload());
         
         $samContent = json_decode($jws->getPayload(), false);
-        $payload = new class{};
+        $claimArray = $samContent->{'urn:telekom.com:idm:at:attributes'};
 
-        // bearer token standard grants
-        $payload->iss = $samContent->iss;
-        $payload->sub = $samContent->sub;
-        $payload->iat = $samContent->iat;
-        $payload->nbf = $samContent->nbf;
-        $payload->exp = $samContent->exp;
-        //$payload->aud = [ $samContent->{''}
+        // adapt into OpenId id_token format (as far as possible)
+        $audience = array_filter($claimArray, function ($kv) { return (strcmp($kv->name, 'client_id') == 0) ? true : false; } );
+        $payload = array(
+            'aud' => [ $audience[0]->value ],
+            'iss' => $samContent->iss,
+            'sub' => $samContent->sub,
+            'iat' => $samContent->iat,
+            'nbf' => $samContent->nbf,
+            'exp' => $samContent->exp,
+        ); 
         // remap all the custom claims
-        foreach ($samContent->{'urn:telekom.com:idm:at:attributes'} as $claimKeyValue) {
-            $payload->{'urn:telekom.com:' . $claimKeyValue->name} = $payload->{$claimKeyValue->value};
+        foreach ( $claimArray as $claimKeyValue ) {
+            $payload['urn:telekom.com:' . $claimKeyValue->name] = $claimKeyValue->value;
         }
+
+        $claims = (object)$payload;
+        $this->logger->debug("Adapted OpenID-like token; " . json_encode($claims));
+        return $claims;
     }
 
-    public function verifyToken(Provider $provider, string $token) : string {
-
-        return $payload;
+    public function verifyToken(Provider $provider, string $token) {
     }
 
 }
