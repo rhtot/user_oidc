@@ -28,6 +28,7 @@ use OCP\ILogger;
 use OCP\AppFramework\Utility\ITimeFactory;
 
 use OCA\UserOIDC\Service\ProviderService;
+use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Db\Provider;
 
 use Jose\Component\Core\AlgorithmManager;
@@ -53,12 +54,17 @@ class JwtService {
 	/** @var ITimeFactory */
 	private $timeFactory;
 
+    /** @var DiscoveryService */
+	private $discoveryService;
+
     public function __construct(ILogger $logger,
                                 ITimeFactory $timeFactory,
-                                ProviderService $providerService) {
+                                ProviderService $providerService,
+                                DiscoveryService $discoveryService) {
         $this->logger = $logger;
         $this->timeFactory = $timeFactory;
         $this->providerService = $providerService;
+        $this->discoveryService = $discoveryService;
         
         // The key encryption algorithm manager with the A256KW algorithm.
         $keyEncryptionAlgorithmManager = new AlgorithmManager([
@@ -145,9 +151,12 @@ class JwtService {
         return $claims;
     }
 
-    public function verifyToken(Provider $provider, object $claims) {
+    public function verifySignature(Provider $provider, string $token) {
+        // TODO: how do we find the right key for signature?
+    }
+
+    public function verifyClaims(Provider $provider, object $claims, int $leeway = 60) {
         $timestamp = $this->timeFactory->getTime();
-        $leeway = 60;
 
         // Check the nbf if it is defined. This is the time that the
         // token can actually be used. If it's not yet that time, abort.

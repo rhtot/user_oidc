@@ -197,8 +197,9 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		        // For details:
 		        // @see https://github.com/firebase/php-jwt
 
+				$this->jwtService->verifySignature($provider, $bearerToken);
 				$claims = $this->jwtService->decodeClaims($provider, $bearerToken);
-				$this->jwtService->verifyToken($provider, $claims);
+				$this->jwtService->verifyClaims($provider, $claims);
 				// check audience (for JWT and SAM case)
 				$clientId = $provider->getClientId();
 				if ($claims->aud !== $clientId && !in_array($clientId, $claims->aud, true)) {

@@ -55,6 +55,9 @@ class DiscoveryService {
 		return json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
 	}
 
+
+
+
 	/**
 	 *  
 	 * Cache once retrieved jwks on each node to speed avoid
@@ -68,11 +71,22 @@ class DiscoveryService {
 		if (is_null($this->cached_jwks)) {
 			$discovery = $this->obtainDiscovery($provider);
 			$client = $this->clientService->newClient();
-			$result = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
-			$this->cached_jwks = JWK::parseKeySet($result);	
-			$this->logger->debug('Parsed the jwks');
+			$this->cached_jwks = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
 		}
 
-		return $this->cached_jwks;
+		return JWK::parseKeySet($this->cached_jwks);
 	}
+
+	public function obtainKeyByAlg(Provider $provider, string $alg): array {
+
+		if (is_null($this->cached_jwks)) {
+			$discovery = $this->obtainDiscovery($provider);
+			$client = $this->clientService->newClient();
+			$this->cached_jwks = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
+		}
+
+		return JWK::parseKeySet($this->cached_jwks);
+	}
+
+
 }
