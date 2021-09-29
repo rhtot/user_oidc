@@ -173,13 +173,13 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		JWT::$leeway = 60;
 		foreach ($this->providerMapper->getProviders() as $provider) {
 			$numSegments = substr_count($rawToken, '.')+1;
+			$this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $rawToken);
 			if ($numSegments>3) {
 				// this could be an encrypted token as it contains more segments
 				$bearerToken = $this->jwtService->decryptToken($provider, $rawToken);
 			} else {
 				$bearerToken = $rawToken;
 			}
-			$this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $bearerToken);
 			
 			// try to decode the (inner) JWT bearer token
 			// TODO: switch to new library as we need only one for handling
@@ -197,8 +197,9 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		        // For details:
 		        // @see https://github.com/firebase/php-jwt
 
-				$this->jwtService->verifyToken($provider, $bearerToken);
 				$claims = $this->jwtService->decodeClaims($provider, $bearerToken);
+				$this->jwtService->verifyToken($provider, $claims);
+				// check audience (for JWT and SAM case)
 				$clientId = $provider->getClientId();
 				if ($claims->aud !== $clientId && !in_array($clientId, $claims->aud, true)) {
 					$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");

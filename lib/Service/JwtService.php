@@ -25,6 +25,8 @@ declare(strict_types=1);
 namespace OCA\UserOIDC\Service;
 
 use OCP\ILogger;
+use OCP\AppFramework\Utility\ITimeFactory;
+
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Db\Provider;
 
@@ -40,15 +42,22 @@ use Jose\Component\Encryption\Algorithm\KeyEncryption\RSAOAEP256;
 use Jose\Component\Encryption\Algorithm\KeyEncryption\ECDHESA256KW;
 use Jose\Component\Encryption\Algorithm\ContentEncryption\A256CBCHS512;
 
+use Jose\Component\Checker\ClaimCheckerManager;
+use Jose\Component\Checker;
 
 class JwtService {
 
     /** @var ILogger */
 	private $logger;
 
+	/** @var ITimeFactory */
+	private $timeFactory;
+
     public function __construct(ILogger $logger,
+                                ITimeFactory $timeFactory,
                                 ProviderService $providerService) {
         $this->logger = $logger;
+        $this->timeFactory = $timeFactory;
         $this->providerService = $providerService;
         
         // The key encryption algorithm manager with the A256KW algorithm.
@@ -87,7 +96,7 @@ class JwtService {
     }
     
     /**
-     * Implement JWE decryption for SAM3 tokens
+     * Implement JOSE decryption for SAM3 tokens
      */
     public function decryptToken(Provider $provider, string $token) : string {
         // trusted authenticator and myself share the client secret,
@@ -136,7 +145,31 @@ class JwtService {
         return $claims;
     }
 
-    public function verifyToken(Provider $provider, string $token) {
+    public function verifyToken(Provider $provider, object $claims) {
+        $timestamp = $this->timeFactory->getTime();
+        $leeway = 60;
+
+        // Check the nbf if it is defined. This is the time that the
+        // token can actually be used. If it's not yet that time, abort.
+        if (isset($claims->nbf) && $claims->nbf > ($timestamp + $leeway)) {
+            throw new InvalidTokenException(
+                'Cannot handle token prior to ' . \date(DateTime::ISO8601, $claims->nbf)
+            );
+        }
+
+        // Check that this token has been created before 'now'. This prevents
+        // using tokens that have been created for later use (and haven't
+        // correctly used the nbf claim).
+        if (isset($claims->iat) && $claims->iat > ($timestamp + $leeway)) {
+            throw new InvalidTokenException(
+                'Cannot handle token prior to ' . \date(DateTime::ISO8601, $claims->iat)
+            );
+        }
+
+        // Check if this token has expired.
+        if (isset($claims->exp) && ($timestamp - $leeway) >= $claims->exp) {
+            throw new InvalidTokenException('Expired token');
+        }
     }
 
 }
