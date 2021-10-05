@@ -202,10 +202,11 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				$this->jwtService->verifyClaims($provider, $claims);
 				// check audience (for JWT and SAM case)
 				$clientId = $provider->getClientId();
-				if ($claims->aud !== $clientId && !in_array($clientId, $claims->aud, true)) {
-					$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
-					return '';
-				}
+				// TODO: adapt audience checking
+				//if ($claims->aud !== $clientId && !in_array($clientId, $claims->aud, true)) {
+				//	$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
+				//	return '';
+				//}
 	
 				try {
 					$this->logger->error('Decoded bearer token: ' . json_encode($claims));
