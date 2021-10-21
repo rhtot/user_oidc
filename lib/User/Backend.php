@@ -222,8 +222,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				// only the key seems not to fit, so try the next provider
 				$this->logger->debug('Invalid provider key:' . $e->getMessage());
 				continue;
-			} 
-			catch (Throwable $e) {
+			}
+			catch (\Throwable $e) {
 				// there is
 				$this->logger->error('Invalid token (general):' . $e->getMessage());
 				return '';
