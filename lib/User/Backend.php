@@ -29,13 +29,13 @@ use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\JwtService;
+use OCA\UserOIDC\Service\SignatureException;
+use OCA\UserOIDC\Service\AttributeValueException;
 use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
 use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\UserMapper;
-use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
-use OCA\UserOIDC\Vendor\Firebase\JWT\SignatureInvalidException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\Authentication\IApacheBackend;
 use OCP\DB\Exception;
@@ -44,6 +44,8 @@ use OCP\User\Backend\ABackend;
 use OCP\User\Backend\IGetDisplayNameBackend;
 use OCP\User\Backend\IPasswordConfirmationBackend;
 use Psr\Log\LoggerInterface;
+
+use Base64Url\Base64Url;
 
 class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisplayNameBackend, IApacheBackend {
 	/** @var UserMapper */
@@ -138,7 +140,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// if this returns true, getCurrentUserId is called
 		// not sure if we should rather to the validation in here as otherwise it might fail for other backends or bave other side effects
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
-		// Authorisation is also send for other tokens, so make sure the handling here only goes for bearer
+		// Authorization is also send for other tokens, so make sure the handling here only goes for bearer
 		//return $headerToken !== '';
 		return preg_match('/^\s*bearer\s+/i', $headerToken);
 	}
@@ -166,40 +168,16 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		$rawToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
 		if ($rawToken === '') {
-			$this->logger->warning('Autorisation header without bearer token received');
+			$this->logger->warning('Authorization header without bearer token received');
 			return '';
 		}
 
-		JWT::$leeway = 60;
-		foreach ($this->providerMapper->getProviders() as $provider) {
-			$numSegments = substr_count($rawToken, '.')+1;
-			$this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $rawToken);
-			if ($numSegments>3) {
-				// this could be an encrypted token as it contains more segments
-				$bearerToken = $this->jwtService->decryptToken($provider, $rawToken);
-			} else {
-				$bearerToken = $rawToken;
-			}
-			
-			// try to decode the (inner) JWT bearer token
-			// TODO: switch to new library as we need only one for handling
+		foreach ($this->providerMapper->getProviders() as $provider) {			
 			try {
-				//$claims = JWT::decode($bearerToken, $this->discoveryService->obtainJWK($provider), array_keys(JWT::$supported_algs));	
-				//$this->logger->debug('Bearer access payload=');
-		        // JWT decode has already done the following steps
-		        // @throws DomainException              Algorithm was not provided
-		        // @throws UnexpectedValueException     Provided JWT was invalid
-		        // @throws SignatureInvalidException    Provided JWT was invalid because the signature verification failed
-		        // @throws BeforeValidException         Provided JWT is trying to be used before it's eligible as defined by 'nbf'
-		        // @throws BeforeValidException         Provided JWT is trying to be used before it's been created as defined by 'iat'
-		        // @throws ExpiredException             Provided JWT has since expired, as defined by the 'exp' claim
-		        //
-		        // For details:
-		        // @see https://github.com/firebase/php-jwt
-
-				$this->jwtService->verifySignature($provider, $bearerToken);
-				$claims = $this->jwtService->decodeClaims($provider, $bearerToken);
-				$this->jwtService->verifyClaims($provider, $claims);
+				$bearerToken = $this->jwtService->decryptToken($rawToken, Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993'));
+				$this->jwtService->verifySignature($bearerToken, Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993'));
+				$claims = $this->jwtService->decodeClaims($bearerToken);
+				$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
 				// check audience (for JWT and SAM case)
 				$clientId = $provider->getClientId();
 				// TODO: adapt audience checking
@@ -209,20 +187,20 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				//}
 	
 				try {
-					$this->logger->error('Decoded bearer token: ' . json_encode($claims));
+					$this->logger->debug('Decoded bearer token: ' . json_encode($claims));
 					$user = $this->userService->userFromToken($provider, $claims);
-					$this->logger->error('User ' . $user->getUID() . ' authorized by Bearer');
+					$this->logger->info('User ' . $user->getUID() . ' authorized by Bearer');
 					return $user->getUID();
 				} catch (AttributeValueException $eAttribute) {
 					$this->logger->error('Invalid token (access) claims:' . $eAttribute->getMessage());
 					return '';
 				}
 			}
-			catch (SignatureInvalidException $eSignature) {
+			catch (SignatureException $eSignature) {
 				// only the key seems not to fit, so try the next provider
-				$this->logger->debug('Invalid provider key:' . $e->getMessage());
+				$this->logger->debug($e->getMessage() . ". Trying another provider.");
 				continue;
-			}
+			} 
 			catch (\Throwable $e) {
 				// there is
 				$this->logger->error('Invalid token (general):' . $e->getMessage());

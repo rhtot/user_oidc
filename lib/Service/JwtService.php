@@ -27,10 +27,6 @@ namespace OCA\UserOIDC\Service;
 use OCP\ILogger;
 use OCP\AppFramework\Utility\ITimeFactory;
 
-use OCA\UserOIDC\Service\ProviderService;
-use OCA\UserOIDC\Service\DiscoveryService;
-use OCA\UserOIDC\Db\Provider;
-
 use Jose\Component\Core\AlgorithmManager;
 use Jose\Component\Encryption\Compression\CompressionMethodManager;
 use Jose\Component\Encryption\Compression\Deflate;
@@ -43,8 +39,13 @@ use Jose\Component\Encryption\Algorithm\KeyEncryption\RSAOAEP256;
 use Jose\Component\Encryption\Algorithm\KeyEncryption\ECDHESA256KW;
 use Jose\Component\Encryption\Algorithm\ContentEncryption\A256CBCHS512;
 
-use Jose\Component\Checker\ClaimCheckerManager;
-use Jose\Component\Checker;
+use Jose\Component\Signature\Algorithm\HS256;
+use Jose\Component\Signature\Algorithm\HS384;
+use Jose\Component\Signature\Algorithm\HS512;
+use Jose\Component\Signature\JWSVerifier;
+use Jose\Component\Signature\JWS;
+
+use BAse64Url\Base64Url;
 
 class JwtService {
 
@@ -58,13 +59,9 @@ class JwtService {
 	private $discoveryService;
 
     public function __construct(ILogger $logger,
-                                ITimeFactory $timeFactory,
-                                ProviderService $providerService,
-                                DiscoveryService $discoveryService) {
+                                ITimeFactory $timeFactory) {
         $this->logger = $logger;
         $this->timeFactory = $timeFactory;
-        $this->providerService = $providerService;
-        $this->discoveryService = $discoveryService;
         
         // The key encryption algorithm manager with the A256KW algorithm.
         $keyEncryptionAlgorithmManager = new AlgorithmManager([
@@ -82,11 +79,22 @@ class JwtService {
             new Deflate(),
         ]);
         
+        $signatureAlgorithmManager = new AlgorithmManager([
+            new HS256(),
+            new HS384(),
+            new HS512(),
+        ]);
+
         // We instantiate our JWE Decrypter.
         $this->jweDecrypter = new JWEDecrypter(
             $keyEncryptionAlgorithmManager,
             $contentEncryptionAlgorithmManager,
             $compressionMethodManager
+        );
+
+        // We instantiate our JWS Verifier.
+        $this->jwsVerifier = new JWSVerifier(
+            $signatureAlgorithmManager
         );
 
         // The serializer manager. We only use the JWE Compact Serialization Mode.
@@ -104,37 +112,40 @@ class JwtService {
     /**
      * Implement JOSE decryption for SAM3 tokens
      */
-    public function decryptToken(Provider $provider, string $token) : string {
-        // trusted authenticator and myself share the client secret,
-        // so use it is used for encrypted web tokens
-        $clientSecret = JWK::create([
-            'kty' => 'oct',
-            'k' => $provider->getClientSecret()
-            //'k' => 'dzI6nbW4OcNF-AtfxGAmuyz7IpHRudBI0WgGjZWgaRJt6prBn3DARXgUR8NVwKhfL43QBIU2Un3AvCGCHRgY4TbEqhOi8-i98xxmCggNjde4oaW6wkJ2NgM3Ss9SOX9zS3lcVzdCMdum-RwVJ301kbin4UtGztuzJBeg5oVN00MGxjC2xWwyI0tgXVs-zJs5WlafCuGfX1HrVkIf5bvpE0MQCSjdJpSeVao6-RSTYDajZf7T88a2eVjeW31mMAg-jzAWfUrii61T_bYPJFOXW8kkRWoa1InLRdG6bKB9wQs9-VdXZP60Q4Yuj_WZ-lO7qV9AEFrUkkjpaDgZT86w2g',
-        ]);
-
-        // We try to load the token.
-        $jwe = $this->encryptionSerializerManager->unserialize($token);
+    public function decryptToken(string $rawToken, string $decryptKey ) : JWS {
+        // web-token library does not like underscores in headers, so replace them with - (which is valid in JWT)
+        $numSegments = substr_count($rawToken, '.')+1;
+        $this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $rawToken);
+        if ($numSegments>3) {
+            // trusted authenticator and myself share the client secret,
+            // so use it is used for encrypted web tokens
+            $clientSecret = new JWK([
+                'kty' => 'oct',
+                'k' => $decryptKey
+            ]);
+            // We try to load the token.
+            $jwe = $this->encryptionSerializerManager->unserialize($rawToken);
         
-        // We decrypt the token. This method does NOT check the header.
-        return $this->jweDecrypter->decryptUsingKey($jwe, $jwk, 0);
+            // We decrypt the token. This method does NOT check the header.
+            return $this->jweDecrypter->decryptUsingKey($jwe, $jwk, 0);
+        } else {
+            return $this->serializerManager->unserialize($rawToken);
+        }
     }
 
     /**
      * Get claims (even before verification to access e.g. aud standard field ...)
      * Transform them in a format compatible with id_token representation.
      */
-    public function decodeClaims(Provider $provider, string $token) : object {
-        $jws = $this->serializerManager->unserialize($token);
-        $this->logger->debug("Telekom SAM3 access token: " . $jws->getPayload());
+    public function decodeClaims(JWS $decodedToken) : object {
+        $this->logger->debug("Telekom SAM3 access token: " . $decodedToken->getPayload());
         
-        $samContent = json_decode($jws->getPayload(), false);
+        $samContent = json_decode($decodedToken->getPayload(), false);
         $claimArray = $samContent->{'urn:telekom.com:idm:at:attributes'};
 
         // adapt into OpenId id_token format (as far as possible)
-        $audience = array_filter($claimArray, function ($kv) { return (strcmp($kv->name, 'client_id') == 0) ? true : false; } );
         $payload = array(
-            'aud' => [ $audience[0]->value ],
+            'aud' => $samContent->aud,
             'iss' => $samContent->iss,
             'sub' => $samContent->sub,
             'iat' => $samContent->iat,
@@ -151,11 +162,19 @@ class JwtService {
         return $claims;
     }
 
-    public function verifySignature(Provider $provider, string $token) {
-        // TODO: how do we find the right key for signature?
+
+    public function verifySignature(JWS $decodedToken, string $signKey) {
+        $accessSecret = new JWK([
+            'kty' => 'oct',
+            'k'   => $signKey 
+        ]); // TODO: take the additional access key secret from settings
+
+        if (!$this->jwsVerifier->verifyWithKey($decodedToken, $accessSecret, 0)) {
+            throw new SignatureException('Invalid Signature');
+        }
     }
 
-    public function verifyClaims(Provider $provider, object $claims, int $leeway = 60) {
+    public function verifyClaims(object $claims, array $audiences = [], int $leeway = 60) {
         $timestamp = $this->timeFactory->getTime();
 
         // Check the nbf if it is defined. This is the time that the
@@ -178,6 +197,12 @@ class JwtService {
         // Check if this token has expired.
         if (isset($claims->exp) && ($timestamp - $leeway) >= $claims->exp) {
             throw new InvalidTokenException('Expired token');
+        }
+
+        // Check target audience (if given)
+        // Check if this token has expired.
+        if (!empty(array_intersect($claims->aud, $audiences))) {
+            throw new InvalidTokenException('No acceptable audience in token.');
         }
     }
 
