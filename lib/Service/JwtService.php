@@ -127,7 +127,11 @@ class JwtService {
             $jwe = $this->encryptionSerializerManager->unserialize($rawToken);
         
             // We decrypt the token. This method does NOT check the header.
-            return $this->jweDecrypter->decryptUsingKey($jwe, $jwk, 0);
+            if ( $this->jweDecrypter->decryptUsingKey($jwe, $clientSecret, 0) ) {
+                return $this->serializerManager->unserialize($jwe->getPayload());
+            } else {
+                throw new InvalidTokenException('Unknown bearer encryption format');    
+            }
         } else {
             return $this->serializerManager->unserialize($rawToken);
         }
