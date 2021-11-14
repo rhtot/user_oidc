@@ -91,14 +91,15 @@ class ProviderMapper extends QBMapper {
 	 * @param string identifier
 	 * @param string|null $clientid
 	 * @param string|null $clientsecret
+	 * @param string|null $bearersecret
 	 * @param string|null $discoveryuri
 	 * @param string scope
 	 * @throws \OCP\AppFramework\Db\DoesNotExistException
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 */
 	public function createOrUpdateProvider(string $identifier, string $clientid = null,
-									string $clientsecret = null, string $discoveryuri = null,
-									string $scope = 'openid email profile') {
+									string $clientsecret = null, string $bearersecret = null,
+									string $discoveryuri = null, string $scope = 'openid email profile') {
 		try {
 			$provider = $this->findProviderByIdentifier($identifier);
 		} catch (DoesNotExistException $eNotExist) {
@@ -107,12 +108,13 @@ class ProviderMapper extends QBMapper {
 
 		if ($provider === null) {
 			$provider = new Provider();
-			if (($clientid === null) || ($clientsecret === null) || ($discoveryuri === null)) {
+			if (($clientid === null) || ($clientsecret === null) || ($bearersecret === null) || ($discoveryuri === null)) {
 				throw new DoesNotExistException("Provider must be created. All provider parameters required.");
 			}
 			$provider->setIdentifier($identifier);
 			$provider->setClientId($clientid);
 			$provider->setClientSecret($clientsecret);
+			$provider->setBearerSecret($bearersecret);
 			$provider->setDiscoveryEndpoint($discoveryuri);
 			$provider->setScope($scope);
 			return $this->insert($provider);
@@ -122,6 +124,9 @@ class ProviderMapper extends QBMapper {
 			}
 			if ($clientsecret !== null) {
 				$provider->setClientSecret($clientsecret);
+			}
+			if ($bearersecret !== null) {
+				$provider->setClientSecret($bearersecret);
 			}
 			if ($discoveryuri !== null) {
 				$provider->setDiscoveryEndpoint($discoveryuri);

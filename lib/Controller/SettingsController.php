@@ -59,7 +59,7 @@ class SettingsController extends Controller {
 	}
 
 	public function createProvider(string $identifier, string $clientId, string $clientSecret, string $discoveryEndpoint,
-								   array $settings = [], string $scope = "openid email profile"): JSONResponse {
+								string $bearerSecret, array $settings = [], string $scope = "openid email profile"): JSONResponse {
 		if ($this->providerService->getProviderByIdentifier($identifier) !== null) {
 			return new JSONResponse(['message' => 'Provider with the given identifier already exists'], Http::STATUS_CONFLICT);
 		}
@@ -70,6 +70,7 @@ class SettingsController extends Controller {
 		$provider->setClientSecret($clientSecret);
 		$provider->setDiscoveryEndpoint($discoveryEndpoint);
 		$provider->setScope($scope);
+		$provider->setBearerSecret($bearerSecret);
 		$provider = $this->providerMapper->insert($provider);
 
 		$providerSettings = $this->providerService->setSettings($provider->getId(), $settings);
@@ -78,7 +79,7 @@ class SettingsController extends Controller {
 	}
 
 	public function updateProvider(int $providerId, string $identifier, string $clientId, string $discoveryEndpoint, string $clientSecret = null,
-								   array $settings = [], string $scope = "openid email profile"): JSONResponse {
+								   string $bearerSecret = null, array $settings = [], string $scope = "openid email profile"): JSONResponse {
 		$provider = $this->providerMapper->getProvider($providerId);
 
 		if ($this->providerService->getProviderByIdentifier($identifier) === null) {
@@ -89,6 +90,9 @@ class SettingsController extends Controller {
 		$provider->setClientId($clientId);
 		if ($clientSecret) {
 			$provider->setClientSecret($clientSecret);
+		}
+		if ($bearerSecret) {
+			$provider->setBearerSecret($bearerSecret);
 		}
 		$provider->setDiscoveryEndpoint($discoveryEndpoint);
 		$provider->setScope($scope);

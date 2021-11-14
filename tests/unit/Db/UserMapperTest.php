@@ -23,6 +23,8 @@
 
 declare(strict_types=1);
 
+namespace OCA\UserOIDC\UnitTest;
+
 
 use OCA\UserOIDC\Db\UserMapper;
 use OCA\UserOIDC\Service\ProviderService;

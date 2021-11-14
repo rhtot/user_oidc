@@ -60,6 +60,15 @@
 				type="text"
 				placeholder="openid email profile">
 		</p>
+		<p>
+			<label for="oidc-bearer-secret">{{ t('user_oidc', 'Bearer shared secret') }}</label>
+			<input id="oidc-bearer-secret"
+				v-model="localProvider.clientSecret"
+				:placeholder="update ? t('user_oidc', 'Leave empty to keep existing') : null"
+				type="text"
+				:required="!update"
+				autocomplete="off">
+		</p>
 		<h4>{{ t('user_oidc', 'Attribute mapping') }}</h4>
 		<p>
 			<label for="mapping-uid">{{ t('user_oidc', 'User ID mapping') }}</label>

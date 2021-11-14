@@ -36,24 +36,27 @@ use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\UserMapper;
-use OCP\AppFramework\Db\DoesNotExistException;
-use OCP\Authentication\IApacheBackend;
-use OCP\DB\Exception;
+
+use OCP\ILogger;
 use OCP\IRequest;
 use OCP\User\Backend\ABackend;
 use OCP\User\Backend\IGetDisplayNameBackend;
 use OCP\User\Backend\IPasswordConfirmationBackend;
-use Psr\Log\LoggerInterface;
+
+
+use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\Authentication\IApacheBackend;
+use OCP\DB\Exception;
 
 use Base64Url\Base64Url;
 
 class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisplayNameBackend, IApacheBackend {
-	/** @var UserMapper */
-	private $userMapper;
-	/** @var LoggerInterface */
+	/** @var ILogger */
 	private $logger;
 	/** @var IRequest */
 	private $request;
+	/** @var UserMapper */
+	private $userMapper;
 	/** @var ProviderMapper */
 	private $providerMapper;
 	/** @var ProviderService */
@@ -65,11 +68,11 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	/** @var JwtService */
 	private $jwtService;
 
-	public function __construct(UserMapper $userMapper,
-								LoggerInterface $logger,
+	public function __construct(ILogger $logger,
 								IRequest $request,
 								ProviderMapper $providerMapper,
 								ProviderService $providerService,
+								UserMapper $userMapper,
 								UserService $userService,
 								DiscoveryService $discoveryService,
 								JwtService $jwtService) {
@@ -142,7 +145,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		// Authorization is also send for other tokens, so make sure the handling here only goes for bearer
 		//return $headerToken !== '';
-		return preg_match('/^\s*bearer\s+/i', $headerToken);
+		return (preg_match('/^\s*bearer\s+/i', $headerToken) != false);
 	}
 
 	/**

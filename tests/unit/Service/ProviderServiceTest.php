@@ -23,6 +23,7 @@
 
 declare(strict_types=1);
 
+namespace OCA\UserOIDC\UnitTest;
 
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
@@ -48,9 +49,6 @@ class ProviderServiceTest extends TestCase {
 
 	public function setUp(): void {
 		parent::setUp();
-		$this->config = $this->createMock(IConfig::class);
-		$this->providerMapper = $this->createMock(ProviderMapper::class);
-		$this->providerService = new ProviderService($this->config, $this->providerMapper);
 	}
 
 	public function testGetProvidersWithSettings() {
