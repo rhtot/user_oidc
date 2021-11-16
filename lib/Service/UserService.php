@@ -143,9 +143,5 @@ class UserService {
 		}
     
 		return $user;
-		//return array (
-		//	"userBackend" => $backendUser, 
-		//	"userAccount" => $user
-		//);
 	}
 }

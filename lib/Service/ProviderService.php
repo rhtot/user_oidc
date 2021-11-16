@@ -33,7 +33,6 @@ use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\IConfig;
 
 class ProviderService {
-	public const SETTING_CHECK_BEARER = 'checkBearer';
 	public const SETTING_UNIQUE_UID = 'uniqueUid';
 	public const SETTING_MAPPING_UID = 'mappingUid';
 	public const SETTING_MAPPING_UID_DEFAULT = 'sub';
@@ -123,12 +122,11 @@ class ProviderService {
 			self::SETTING_MAPPING_QUOTA,
 			self::SETTING_MAPPING_UID,
 			self::SETTING_UNIQUE_UID,
-			self::SETTING_CHECK_BEARER,
 		];
 	}
 
 	private function convertFromJSON(string $key, $value): string {
-		if ($key === self::SETTING_UNIQUE_UID || $key === self::SETTING_CHECK_BEARER) {
+		if ($key === self::SETTING_UNIQUE_UID) {
 			$value = $value ? '1' : '0';
 		}
 		return (string)$value;
@@ -136,7 +134,7 @@ class ProviderService {
 
 	private function convertToJSON(string $key, $value) {
 		// default is disabled (if not set)
-		if ($key === self::SETTING_UNIQUE_UID || $key === self::SETTING_CHECK_BEARER) {
+		if ($key === self::SETTING_UNIQUE_UID) {
 			return $value === '1';
 		}
 		return (string)$value;

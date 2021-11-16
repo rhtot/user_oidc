@@ -43,30 +43,30 @@ class TokenTestCase extends TestCase {
 	 */
 	private $realExampleClaims;
 
-   public function getRealExampleClaims() : array {
-      return $this->realExampleClaims;
-   }
+	public function getRealExampleClaims() : array {
+		return $this->realExampleClaims;
+	}
 
-   /**
-    * Test bearer secret
-    */
-   public function getTestBearerSecret() {
-      return \Base64Url\Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993');
-   }
+	/**
+	 * Test bearer secret
+	 */
+	public function getTestBearerSecret() {
+		return \Base64Url\Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993');
+	}
 
 
 	public function setUp(): void {
 		parent::setUp();
 
-      $this->jwtService = \OC::$server->get(JwtService::class);
-      $this->realExampleClaims = array(
+		$this->jwtService = \OC::$server->get(JwtService::class);
+		$this->realExampleClaims = array(
 			'iss' => 'sts00.idm.ver.sul.t-online.de',
 			'urn:telekom.com:idm:at:subjectType' => array(
 				'format' => 'urn:com:telekom:idm:1.0:nameid-format:anid',
 				'realm' => 'ver.sul.t-online.de'
 			),
 			'acr' => 'urn:telekom:names:idm:THO:1.0:ac:classes:pwd',
-			'sub' => '120049010000000007210207',
+			'sub' => '1200490100000000100XXXXX',
 			'iat' => time(),
 			'nbf' => time(),
 			'exp' => time() + 7200,
@@ -80,7 +80,7 @@ class TokenTestCase extends TestCase {
 			'urn:telekom.com:idm:at:attributes' => [
 				array( 'name' => 'client_id',
 					'nameFormat' => 'urn:com:telekom:idm:1.0:attrname-format:field',
-					'value' => '10TVL0SAM30000004901NEXTGAME0000'),
+					'value' => '10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'),
 				array( 'name' => 'displayname',
 					'nameFormat' => 'urn:com:telekom:idm:1.0:attrname-format:field',
 					'value' => 'nmc01@ver.sul.t-online.de'),
@@ -89,7 +89,7 @@ class TokenTestCase extends TestCase {
 					'value' => 'nmc01@ver.sul.t-online.de'),
 				array( 'name' => 'anid',
 					'nameFormat' => 'urn:com:telekom:idm:1.0:attrname-format:field',
-					'value' => '120049010000000007310207'),
+					'value' => '1200490100000000100XXXXX'),
 				array( 'name' => 'd556',
 					'nameFormat' => 'urn:com:telekom:idm:1.0:attrname-format:field',
 					'value' => '0'),
@@ -135,83 +135,86 @@ class TokenTestCase extends TestCase {
 				array( 'name' => 'usta',
 					'nameFormat' => 'urn:com:telekom:idm:1.0:attrname-format:field',
 					'value' => '1')],
-			'urn:telekom.com:idm:at:version' => '1.0'
-			);
-   }
-	   
-   protected function setupSignedToken(array $claims, string $signKey) {
-      // The algorithm manager with the HS256 algorithm.
-      $algorithmManager = new AlgorithmManager([
-          new HS256(),
-      ]);
-      $jwk = new JWK([
-         'kty' => 'oct',
-         'k' => $signKey]);
-      // We instantiate our JWS Builder.
-      $jwsBuilder = new JWSBuilder($algorithmManager);
+			'urn:telekom.com:idm:at:version' => '1.0');
+	}
+		
+	protected function signToken(array $claims, string $signKey, bool $invalidate = false) : JWS {
+		// The algorithm manager with the HS256 algorithm.
+		$algorithmManager = new AlgorithmManager([
+			new HS256(),
+		]);
 
-      $jws = $jwsBuilder->create()                               // We want to create a new JWS
-                           ->withPayload(json_encode($claims))                   // We set the payload
-                           ->addSignature($jwk, ['alg' => 'HS256']) // We add a signature with a simple protected header
-                           ->build();  
-   
-      $serializer = new \Jose\Component\Signature\Serializer\CompactSerializer();
-      return $serializer->serialize($jws, 0);
-   }
+		if (!$invalidate) {
+			$jwk = new JWK([
+				'kty' => 'oct',
+				'k' => $signKey]);	
+		} else {
+			// use a different key for an invalid signature
+			$jwk = new JWK([
+				'kty' => 'oct',
+				'k' => 'BnWHlEdffC0hfKSxrh01g7/M3djHIiOU6jNwJChYWP8=']);	
+		}
+		// We instantiate our JWS Builder.
+		$jwsBuilder = new JWSBuilder($algorithmManager);
 
-   protected function setupSignEncryptToken(array $claims, string $secret) {
-      // The algorithm manager with the HS256 algorithm.
-      $algorithmManager = new AlgorithmManager([
-         new HS256(),
-      ]);
-      // The key encryption algorithm manager with the A256KW algorithm.
-      $keyEncryptionAlgorithmManager = new AlgorithmManager([
-         new PBES2HS512A256KW(),
-         new RSAOAEP256(),
-         new ECDHESA256KW() 
-         ]);
-      // The content encryption algorithm manager with the A256CBC-HS256 algorithm.
-      $contentEncryptionAlgorithmManager = new AlgorithmManager([
-         new A256CBCHS512(),
-      ]);
-      // The compression method manager with the DEF (Deflate) method.
-      $compressionMethodManager = new CompressionMethodManager([
-         new Deflate(),
-      ]);
+		$jws = $jwsBuilder->create()                               // We want to create a new JWS
+							->withPayload(json_encode($claims))                   // We set the payload
+							->addSignature($jwk, ['alg' => 'HS256']) // We add a signature with a simple protected header
+							->build();  
 
-      $jwk = new JWK([
-         'kty' => 'oct',
-         'k' => $secret]);
-      // We instantiate our JWS Builder.
+	    return $jws;
+	}
 
-      $jwsBuilder = new JWSBuilder($algorithmManager);
-      $jws = $jwsBuilder->create()                               // We want to create a new JWS
-                           ->withPayload(json_encode($claims))                   // We set the payload
-                           ->addSignature($jwk, ['alg' => 'HS256']) // We add a signature with a simple protected header
-                           ->build();  
+	protected function setupSignedToken(array $claims, string $signKey) {
+		$serializer = new \Jose\Component\Signature\Serializer\CompactSerializer();
+		return $serializer->serialize($this->signToken($claims, $signKey), 0);
+	}
 
-      $signSerializer = new \Jose\Component\Signature\Serializer\CompactSerializer();
+	protected function setupEncryptedToken(JWS $token, string $decryptKey) {
+		// The key encryption algorithm manager with the A256KW algorithm.
+		$keyEncryptionAlgorithmManager = new AlgorithmManager([
+			new PBES2HS512A256KW(),
+			new RSAOAEP256(),
+			new ECDHESA256KW() 
+			]);
+		// The content encryption algorithm manager with the A256CBC-HS256 algorithm.
+		$contentEncryptionAlgorithmManager = new AlgorithmManager([
+			new A256CBCHS512(),
+		]);
+		// The compression method manager with the DEF (Deflate) method.
+		$compressionMethodManager = new CompressionMethodManager([
+			new Deflate(),
+		]);
+		$signSerializer = new \Jose\Component\Signature\Serializer\CompactSerializer();
 
-      // We instantiate our JWE Builder.
-      $jweBuilder = new JWEBuilder(
-            $keyEncryptionAlgorithmManager,
-            $contentEncryptionAlgorithmManager,
-            $compressionMethodManager
-         );						  
+		$jwk = new JWK([
+			'kty' => 'oct',
+			'k' => $decryptKey]);
 
-      $jwe = $jweBuilder
-         ->create()                                         // We want to create a new JWE
-         ->withPayload($signSerializer->serialize($jws, 0)) // We set the payload
-         ->withSharedProtectedHeader([
-            'alg' => 'PBES2-HS512+A256KW',                // Key Encryption Algorithm
-            'enc' => 'A256CBC-HS512',                     // Content Encryption Algorithm
-            'zip' => 'DEF'                                // We enable the compression (just for the example).
-         ])
-         ->addRecipient($jwk)
-         ->build();              // We build it
+		// We instantiate our JWE Builder.
+		$jweBuilder = new JWEBuilder(
+				$keyEncryptionAlgorithmManager,
+				$contentEncryptionAlgorithmManager,
+				$compressionMethodManager
+			);						  
 
-      $encryptionSerializer = new \Jose\Component\Encryption\Serializer\CompactSerializer(); // The serializer
-      return $encryptionSerializer->serialize($jwe, 0);
-   }
+		$jwe = $jweBuilder
+			->create()                                         // We want to create a new JWE
+			->withPayload($signSerializer->serialize($token, 0)) // We set the payload
+			->withSharedProtectedHeader([
+				'alg' => 'PBES2-HS512+A256KW',                // Key Encryption Algorithm
+				'enc' => 'A256CBC-HS512',                     // Content Encryption Algorithm
+				'zip' => 'DEF'                                // We enable the compression (just for the example).
+			])
+			->addRecipient($jwk)
+			->build();              // We build it
 
+		$encryptionSerializer = new \Jose\Component\Encryption\Serializer\CompactSerializer(); // The serializer
+		return $encryptionSerializer->serialize($jwe, 0);
+	}
+
+
+	protected function setupSignEncryptToken(array $claims, string $secret, bool $invalidate = false) {
+		return $this->setupEncryptedToken($this->signToken($claims, $secret, $invalidate), $secret);
+	}
 }

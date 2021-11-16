@@ -36,6 +36,8 @@ use OCA\UserOIDC\AppInfo\Application;
 
 use OCA\UserOIDC\User\Backend;
 
+//use OCA\UserOIDC\Db\User;
+use OCP\IUser;
 use OCA\UserOIDC\Db\UserMapper;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Service\ProviderService;
@@ -56,10 +58,19 @@ class HeaderBearerTokenTest extends TokenTestCase {
 	private $provider;
 
 	/**
+	 * @var UserService
+	 */
+	private $userService;
+
+	/**
 	 * @var Backend
 	 */
 	private $backend;
 
+	/**
+	 * @var IConfig;
+	 */
+	private $config;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -68,16 +79,61 @@ class HeaderBearerTokenTest extends TokenTestCase {
 		$this->requestMock = $this->createMock(IRequest::class);
 
 		$this->config = $this->createMock(IConfig::class);
+		$this->config->expects(self::any())
+			->method('getAppValue')
+			->willReturnMap([
+				[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_UID, 'sub', 'uid'],
+				[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_DISPLAYNAME, 'urn:telekom.com:displayname', 'dn'],
+				[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_EMAIL, 'urn:telekom.com:mainEmail', 'mail'],
+				[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_QUOTA, 'quota', '1g'],
+				[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_UNIQUE_UID, '0', '0'],
+			]);
+
+
 		$this->providerMapper = $this->createMock(ProviderMapper::class);
+		$providers = [
+			new \OCA\UserOIDC\Db\Provider(),
+			new \OCA\UserOIDC\Db\Provider()
+		];
+		$providers[0]->setId(1);
+		$providers[0]->setIdentifier('Fraesbook');
+		$providers[1]->setId(2);
+		$providers[1]->setIdentifier('Telekom');
+		$providers[1]->setClientId('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST');
+		$providers[1]->setClientSecret('clientsecret***');
+		$providers[1]->setBearerSecret('bearersecret***');
+		$providers[1]->setDiscoveryEndpoint('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
+
+		$this->providerMapper->expects(self::any())
+			->method('getProviders')
+			->willReturn($providers);
+
 		$this->providerService = new ProviderService($this->config, $this->providerMapper);
+		
+		$user = $this->createMock(IUser::class);
+		$user->expects($this->any())
+			->method('getUID')
+			->willReturn('1200490100000000100XXXXX');
+		$user->expects($this->any())
+			->method('getDisplayName')
+			->willReturn('nmc01');
+		$user->expects($this->any())
+			->method('getEMailAddress')
+			->willReturn('nmc01@ver.sul.t-online.de');
+		$this->userService = $this->createMock(UserService::class);
+		$this->userService->expects($this->any())
+			->method("userFromToken")
+			->willReturn($user);
+
 		$this->backend = new Backend($app->getContainer()->get(ILogger::class),
-									$this->requestMock,
-									$app->getContainer()->get($this->providerMapper),
-									$app->getContainer()->get($this->providerService),
-									$app->getContainer()->get(UserMapper::class),
-									$app->getContainer()->get(UserService::class),
-									$app->getContainer()->get(DiscoveryService::class),
-									$app->getContainer()->get(JwtService::class));
+								$this->requestMock,
+								$this->providerMapper,
+								$this->providerService,
+								$app->getContainer()->get(UserMapper::class),
+								$this->userService,
+								$app->getContainer()->get(DiscoveryService::class),
+								$app->getContainer()->get(JwtService::class));
+
 	}
 
 	public function testValidSignature() {
@@ -86,41 +142,44 @@ class HeaderBearerTokenTest extends TokenTestCase {
 						->method('getHeader')
 						->with($this->equalTo(Application::OIDC_API_REQ_HEADER))
 						->willReturn("Bearer " . $testtoken);
+
 		$this->assertTrue($this->backend->isSessionActive());
-		$this->assertNotEquals('', $this->backend->getCurrentUserId());
+		$this->assertEquals('1200490100000000100XXXXX', $this->backend->getCurrentUserId());
 	}
 
-	// public function testInvalidSignature() {
-	// 	$this->expectException(SignatureException::class);
-	// 	$testtoken = $this->setupSignedToken($this->getRealExampleClaims(), $this->getTestBearerSecret());
-	// 	$invalidSignToken = mb_substr($testtoken, 0, -1); // shorten sign to invalidate
-	// 	// fwrite(STDERR, '[' . $testtoken . ']');
-	// 	$bearerToken = $this->jwtService->decryptToken($invalidSignToken, $this->getTestBearerSecret());
-	// 	$this->jwtService->verifySignature($bearerToken, $this->getTestBearerSecret());
-	// 	$claims = $this->jwtService->decodeClaims($bearerToken);
-	// 	$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
-	// }
+	public function testInvalidSignature() {
+		$testtoken = $this->setupSignedToken($this->getRealExampleClaims(), $this->getTestBearerSecret());
+		$invalidSignToken = mb_substr($testtoken, 0, -1); // shorten sign to invalidate
+		$this->requestMock->expects($this->any())
+						->method('getHeader')
+						->with($this->equalTo(Application::OIDC_API_REQ_HEADER))
+						->willReturn("Bearer " . $invalidSignToken);
 
-	// public function testEncryptedValidSignature() {
-    //     $this->expectNotToPerformAssertions();
-	// 	$testtoken = $this->setupSignEncryptToken($this->getRealExampleClaims(), $this->getTestBearerSecret());
-	// 	//fwrite(STDERR, '[' . $testtoken . ']');
-	// 	$bearerToken = $this->jwtService->decryptToken($testtoken, $this->getTestBearerSecret());
-	// 	$this->jwtService->verifySignature($bearerToken, $this->getTestBearerSecret());
-	// 	$claims = $this->jwtService->decodeClaims($bearerToken);
-	// 	$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
-    // }
+		$this->assertTrue($this->backend->isSessionActive());
+		$this->assertEquals('', $this->backend->getCurrentUserId());
+	}
 
-	// public function testEncryptedInvalidEncryption() {
-	// 	$this->expectException(InvalidTokenException::class);
-	// 	$testtoken = $this->setupSignEncryptToken($this->getRealExampleClaims(), $this->getTestBearerSecret());
-	// 	$invalidEncryption = mb_substr($testtoken, 0, -1); // shorten sign to invalidate
-	// 	//fwrite(STDERR, '[' . $testtoken . ']');
-	// 	$bearerToken = $this->jwtService->decryptToken($invalidEncryption, $this->getTestBearerSecret());
-	// 	$this->jwtService->verifySignature($bearerToken, $this->getTestBearerSecret());
-	// 	$claims = $this->jwtService->decodeClaims($bearerToken);
-	// 	$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
-    // }
+	public function testEncryptedValidSignature() {
+		$testtoken = $this->setupSignEncryptToken($this->getRealExampleClaims(), $this->getTestBearerSecret());
+		$this->requestMock->expects($this->any())
+						->method('getHeader')
+						->with($this->equalTo(Application::OIDC_API_REQ_HEADER))
+						->willReturn("Bearer " . $testtoken);
 
+		$this->assertTrue($this->backend->isSessionActive());
+		$this->assertEquals('1200490100000000100XXXXX', $this->backend->getCurrentUserId());
+	}
+
+	public function testEncryptedInvalidSignature() {
+		$invalidEncToken = $this->setupSignEncryptToken($this->getRealExampleClaims(), 
+								$this->getTestBearerSecret(), true);
+		$this->requestMock->expects($this->any())
+						->method('getHeader')
+						->with($this->equalTo(Application::OIDC_API_REQ_HEADER))
+						->willReturn("Bearer " . $invalidEncToken);
+
+		$this->assertTrue($this->backend->isSessionActive());
+		$this->assertEquals('', $this->backend->getCurrentUserId());
+	}
 
 }

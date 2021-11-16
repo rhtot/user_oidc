@@ -161,12 +161,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	 * @since 6.0.0
 	 */
 	public function getCurrentUserId() {
-		// TODO: this option makes only sense global or not
-		// if ($this->providerService->getSetting($provider->getId(), ProviderService::SETTING_CHECK_BEARER, '0') !== '1') {
-		//	$this->logger->debug('Bearer token check is disabled for provider ' . $provider->getId());
-		//	return '';
-		//}
-
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		$rawToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
@@ -183,11 +177,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
 				// check audience (for JWT and SAM case)
 				$clientId = $provider->getClientId();
-				// TODO: adapt audience checking
-				//if ($claims->aud !== $clientId && !in_array($clientId, $claims->aud, true)) {
-				//	$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
-				//	return '';
-				//}
 	
 				try {
 					$this->logger->debug('Decoded bearer token: ' . json_encode($claims));
@@ -201,7 +190,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 			}
 			catch (SignatureException $eSignature) {
 				// only the key seems not to fit, so try the next provider
-				$this->logger->debug($e->getMessage() . ". Trying another provider.");
+				$this->logger->debug($eSignature->getMessage() . ". Trying another provider.");
 				continue;
 			} 
 			catch (\Throwable $e) {
