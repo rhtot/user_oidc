@@ -47,6 +47,13 @@ To skip the confirmation, use `--force`.
 ***Warning***: be careful with the deletion of a provider because in some setup, this invalidates access to all
 NextCloud accounts associated with this provider.
 
+### Bearer token activation
+The implemented bearer token support requires the exchange of a shared secret with the central authenticator
+for `HS256` signature AND `A256CBCHS512` encryption with the `--bearersecret` option on commandline:
+
+```
+sudo -u www-data php /var/www/nextcloud/occ user_oidc:provider demoprovider --bearersecret="lbXy***********" 
+```
 
 ### ID4me option
 ID4me is an application setting switch which is configurable as normal Nextcloud app setting:
