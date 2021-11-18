@@ -126,7 +126,7 @@ class ProviderMapper extends QBMapper {
 				$provider->setClientSecret($clientsecret);
 			}
 			if ($bearersecret !== null) {
-				$provider->setClientSecret($bearersecret);
+				$provider->setBearerSecret($bearersecret);
 			}
 			if ($discoveryuri !== null) {
 				$provider->setDiscoveryEndpoint($discoveryuri);

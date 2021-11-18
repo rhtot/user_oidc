@@ -46,15 +46,8 @@ class SamBearerTokenTest extends TokenTestCase {
 	private $provider;
 
 
-	/**
-	 * Secret for bearer access key signature and encryption
-	 */
-	private $getTestBearerSecret();
-
 	public function setUp(): void {
 		parent::setUp();
-
-		$this->getTestBearerSecret() = \Base64Url\Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993');
 	}
 
 	public function testValidSignature() {

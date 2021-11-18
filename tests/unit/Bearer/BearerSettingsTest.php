@@ -66,17 +66,6 @@ class BearerSettingsTest extends TestCase {
 		$this->requestMock = $this->createMock(IRequest::class);
 
 		$this->config = $this->createMock(IConfig::class);
-		// $this->config->expects(self::any())
-		// 	->method('getAppValue')
-		// 	->willReturnMap([
-		// 		[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_UID, 'sub', 'uid'],
-		// 		[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_DISPLAYNAME, 'urn:telekom.com:displayname', 'dn'],
-		// 		[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_EMAIL, 'urn:telekom.com:mainEmail', 'mail'],
-		// 		[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_MAPPING_QUOTA, 'quota', '1g'],
-		// 		[Application::APP_ID, 'provider-2-' . ProviderService::SETTING_UNIQUE_UID, '0', '0'],
-		// 	]);
-
-
 		$this->providerMapper = $this->createMock(ProviderMapper::class);
 		$providers = [
 			new \OCA\UserOIDC\Db\Provider(),
@@ -312,7 +301,10 @@ class BearerSettingsTest extends TestCase {
 
 public function testCommandUpdateSingleBearerSecret() {
         $provider = $this->getMockBuilder(Provider::class)
-                ->addMethods(['getId', 'getClientId', 'getClientSecret', 'getBearerSecret', 'getDiscoveryEndpoint', 'getScope'])
+                ->addMethods(['getId', 'getClientId', 'getClientSecret', 
+                              'getBearerSecret', 'getDiscoveryEndpoint', 'getScope',
+                              'setClientId', 'setClientSecret', 
+                              'setBearerSecret', 'setDiscoveryEndpoint', 'setScope'])
                 ->getMock();
         $provider->expects($this->any())
                 ->method('getId')
@@ -321,33 +313,49 @@ public function testCommandUpdateSingleBearerSecret() {
                 ->method('getClientId')
                 ->willReturn('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST');
         $provider->expects($this->once())
+                ->method('setClientId')
+                ->with($this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'));
+        $provider->expects($this->once())
                 ->method('getClientSecret')
                 ->willReturn('clientsecret***');
+        $provider->expects($this->once())
+                ->method('setClientSecret')
+                ->with($this->equalTo('clientsecret***'));
         $provider->expects($this->never())
                 ->method('getBearerSecret')
                 ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->once())
+                ->method('setBearerSecret')
+                ->with($this->equalTo(\Base64Url\Base64Url::encode('***bearersecret***')));
+        $provider->expects($this->once())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
         $provider->expects($this->once())
+                ->method('setDiscoveryEndpoint')
+                ->with($this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'));
+        $provider->expects($this->once())
                 ->method('getScope')
                 ->willReturn('openid email profile');
+        $provider->expects($this->once())
+                 ->method('setScope')
+                 ->with($this->equalTo('openid email profile'));
 
+        $providerMapper = $this->getMockBuilder(ProviderMapper::class)
+                        ->disableOriginalConstructor()
+                        ->onlyMethods(['findProviderByIdentifier'])
+                        ->getMock();
+        $providerMapper->expects($this->once())
+                                ->method('findProviderByIdentifier')
+                                ->with($this->equalTo('Telekom'))
+                                ->willReturn($provider);    
         $this->providerService->expects($this->once())
                             ->method('getProviderByIdentifier')
                             ->with($this->equalTo('Telekom'))
                             ->willReturn($provider);
-        $this->providerMapper->expects($this->once())
-                            ->method('createOrUpdateProvider')
-                            ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                    $this->equalTo(\Base64Url\Base64Url::encode('***bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
-                                    $this->equalTo('openid email profile'))
-                            ->willReturn($provider);
-
         $this->config->expects($this->never())
                         ->method('setAppValue');
 
-        $command = new UpsertProvider($this->providerService, $this->providerMapper);
+        $command = new UpsertProvider($this->providerService, $providerMapper);
         $commandTester = new CommandTester($command);
 
         $commandTester->execute(array(

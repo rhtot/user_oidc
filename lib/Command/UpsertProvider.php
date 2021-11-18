@@ -86,6 +86,8 @@ class UpsertProvider extends Command {
 		$bearerSecretOption = $input->getOption('bearersecret');
 		if (!is_null($bearerSecretOption)) {
 			$bearersecret = \Base64Url\Base64Url::encode($bearerSecretOption);
+		} else {
+			$bearersecret = null;
 		}
 
 		if ($identifier === null) {

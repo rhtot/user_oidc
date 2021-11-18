@@ -33,6 +33,9 @@ use Jose\Component\Encryption\JWEBuilder;
  */
 class TokenTestCase extends TestCase {
 
+	/** @var App */
+	protected $app;
+
 	/**
 	 * @var JwtService
 	 */
@@ -58,7 +61,9 @@ class TokenTestCase extends TestCase {
 	public function setUp(): void {
 		parent::setUp();
 
-		$this->jwtService = \OC::$server->get(JwtService::class);
+		$this->app = new App(Application::APP_ID);
+
+		$this->jwtService = $this->app->getContainer()->get(JwtService::class);
 		$this->realExampleClaims = array(
 			'iss' => 'sts00.idm.ver.sul.t-online.de',
 			'urn:telekom.com:idm:at:subjectType' => array(
