@@ -124,8 +124,10 @@ class UpsertProvider extends Command {
 			$clientsecret = $clientsecret ?? $provider->getClientSecret();
 			$bearersecret = $bearersecret ?? $provider->getBearerSecret();
 			$discoveryuri = $discoveryuri ?? $provider->getDiscoveryEndpoint();
+			$scope = $scope ?? $provider->getScope();
+		} else {
+			$scope = 'openid email profile';
 		}
-		$scope = $scope ?? 'openid email profile';
 		try {
 			$provider = $this->providerMapper->createOrUpdateProvider($identifier, $clientid, $clientsecret, 
 																	$bearersecret, $discoveryuri, $scope);
