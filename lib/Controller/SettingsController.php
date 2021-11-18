@@ -70,7 +70,7 @@ class SettingsController extends Controller {
 		$provider->setClientSecret($clientSecret);
 		$provider->setDiscoveryEndpoint($discoveryEndpoint);
 		$provider->setScope($scope);
-		$provider->setBearerSecret($bearerSecret);
+		$provider->setBearerSecret(\Base64Url\Base64Url::encode($bearerSecret));
 		$provider = $this->providerMapper->insert($provider);
 
 		$providerSettings = $this->providerService->setSettings($provider->getId(), $settings);
@@ -92,7 +92,7 @@ class SettingsController extends Controller {
 			$provider->setClientSecret($clientSecret);
 		}
 		if ($bearerSecret) {
-			$provider->setBearerSecret($bearerSecret);
+			$provider->setBearerSecret(\Base64Url\Base64Url::encode($bearerSecret));
 		}
 		$provider->setDiscoveryEndpoint($discoveryEndpoint);
 		$provider->setScope($scope);

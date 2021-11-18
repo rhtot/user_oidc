@@ -79,9 +79,14 @@ class UpsertProvider extends Command {
 		$identifier = $input->getArgument('identifier');
 		$clientid = $input->getOption('clientid');
 		$clientsecret = $input->getOption('clientsecret');
-		$bearersecret = $input->getOption('bearersecret');
 		$discoveryuri = $input->getOption('discoveryuri');
 		$scope = $input->getOption('scope');
+
+		// bearersecret is usually base64 encoded, but SAM delivers it "pure"
+		$bearerSecretOption = $input->getOption('bearersecret');
+		if (!is_null($bearerSecretOption)) {
+			$bearersecret = \Base64Url\Base64Url::encode($bearerSecretOption);
+		}
 
 		if ($identifier === null) {
 			return $this->listProviders($input, $output);

@@ -44,7 +44,7 @@ use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\TestCase;
 
 class BearerSettingsTest extends TestCase {
-    	/**
+        /**
 	 * @var ProviderService
 	 */
 	private $provider;
@@ -110,7 +110,7 @@ class BearerSettingsTest extends TestCase {
         $this->providerMapper->expects($this->once())
                                 ->method('createOrUpdateProvider')
                                 ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                        $this->equalTo('bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
+                                        $this->equalTo(\Base64Url\Base64Url::encode('bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
                                         $this->equalTo('openid email profile'))
                 ->willReturn($provider);
 
@@ -166,7 +166,7 @@ class BearerSettingsTest extends TestCase {
                 ->willReturn('clientsecret***');
         $provider->expects($this->never())
                 ->method('getBearerSecret')
-                ->willReturn('bearersecret***');
+                ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->never())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -181,7 +181,7 @@ class BearerSettingsTest extends TestCase {
         $this->providerMapper->expects($this->once())
                             ->method('createOrUpdateProvider')
                             ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004902NEXTMAGENTACLOUDTEST'), $this->equalTo('client*secret***'),
-                                    $this->equalTo('bearer*secret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-unknown/openid-configuration'), 
+                                    $this->equalTo(\Base64Url\Base64Url::encode('bearer*secret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-unknown/openid-configuration'), 
                                     $this->equalTo('openid profile'))
                             ->willReturn($provider);
 
@@ -232,7 +232,7 @@ class BearerSettingsTest extends TestCase {
                         ->willReturn('clientsecret***');
                 $provider->expects($this->once())
                         ->method('getBearerSecret')
-                        ->willReturn('bearersecret***');
+                        ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
                 $provider->expects($this->once())
                         ->method('getDiscoveryEndpoint')
                         ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -247,7 +247,7 @@ class BearerSettingsTest extends TestCase {
                 $this->providerMapper->expects($this->once())
                                     ->method('createOrUpdateProvider')
                                     ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004903NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                            $this->equalTo('bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
+                                            $this->equalTo(\Base64Url\Base64Url::encode('bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
                                             $this->equalTo('openid email profile'))
                                     ->willReturn($provider);
         
@@ -279,7 +279,7 @@ class BearerSettingsTest extends TestCase {
                 ->willReturn('clientsecret***');
         $provider->expects($this->once())
                 ->method('getBearerSecret')
-                ->willReturn('bearersecret***');
+                ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->once())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -294,7 +294,7 @@ class BearerSettingsTest extends TestCase {
         $this->providerMapper->expects($this->once())
                             ->method('createOrUpdateProvider')
                             ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('***clientsecret***'),
-                                    $this->equalTo('bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
+                                    $this->equalTo(\Base64Url\Base64Url::encode('bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
                                     $this->equalTo('openid email profile'))
                             ->willReturn($provider);
 
@@ -325,7 +325,7 @@ public function testCommandUpdateSingleBearerSecret() {
                 ->willReturn('clientsecret***');
         $provider->expects($this->never())
                 ->method('getBearerSecret')
-                ->willReturn('bearersecret***');
+                ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->once())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -340,7 +340,7 @@ public function testCommandUpdateSingleBearerSecret() {
         $this->providerMapper->expects($this->once())
                             ->method('createOrUpdateProvider')
                             ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                    $this->equalTo('***bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
+                                    $this->equalTo(\Base64Url\Base64Url::encode('***bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
                                     $this->equalTo('openid email profile'))
                             ->willReturn($provider);
 
@@ -371,7 +371,7 @@ public function testCommandUpdateSingleDiscoveryEndpoint() {
                 ->willReturn('clientsecret***');
         $provider->expects($this->once())
                 ->method('getBearerSecret')
-                ->willReturn('bearersecret***');
+                ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->never())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -386,7 +386,7 @@ public function testCommandUpdateSingleDiscoveryEndpoint() {
         $this->providerMapper->expects($this->once())
                             ->method('createOrUpdateProvider')
                             ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                    $this->equalTo('bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-unknown/openid-configuration'), 
+                                    $this->equalTo(\Base64Url\Base64Url::encode('bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-unknown/openid-configuration'), 
                                     $this->equalTo('openid email profile'))
                             ->willReturn($provider);
 
@@ -417,7 +417,7 @@ public function testCommandUpdateSingleScope() {
                 ->willReturn('clientsecret***');
         $provider->expects($this->once())
                 ->method('getBearerSecret')
-                ->willReturn('bearersecret***');
+                ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->once())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -432,7 +432,7 @@ public function testCommandUpdateSingleScope() {
         $this->providerMapper->expects($this->once())
                             ->method('createOrUpdateProvider')
                             ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                    $this->equalTo('bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
+                                    $this->equalTo(\Base64Url\Base64Url::encode('bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
                                     $this->equalTo('openid profile'))
                             ->willReturn($provider);
 
@@ -463,7 +463,7 @@ public function testCommandUpdateSingleUniqueUid() {
                 ->willReturn('clientsecret***');
         $provider->expects($this->once())
                 ->method('getBearerSecret')
-                ->willReturn('bearersecret***');
+                ->willReturn(\Base64Url\Base64Url::encode('bearersecret***'));
         $provider->expects($this->once())
                 ->method('getDiscoveryEndpoint')
                 ->willReturn('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration');
@@ -478,7 +478,7 @@ public function testCommandUpdateSingleUniqueUid() {
         $this->providerMapper->expects($this->once())
                             ->method('createOrUpdateProvider')
                             ->with($this->equalTo('Telekom'), $this->equalTo('10TVL0SAM30000004901NEXTMAGENTACLOUDTEST'), $this->equalTo('clientsecret***'),
-                                    $this->equalTo('bearersecret***'), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
+                                    $this->equalTo(\Base64Url\Base64Url::encode('bearersecret***')), $this->equalTo('https://accounts.login00.idm.ver.sul.t-online.de/.well-known/openid-configuration'), 
                                     $this->equalTo('openid email profile'))
                             ->willReturn($provider);
 
