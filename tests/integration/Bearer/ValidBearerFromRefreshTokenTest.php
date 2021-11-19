@@ -26,9 +26,10 @@ declare(strict_types=1);
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\RedirectMiddleware;
-use OCA\UserOIDC\Db\ProviderMapper;
-use OCA\UserOIDC\Service\ProviderService;
 
+use OCA\UserOIDC\AppInfo\Application;
+
+use OCP\AppFramework\App;
 
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\TestCase;
@@ -47,146 +48,92 @@ use PHPUnit\Framework\TestCase;
  * It also practically documents the way to get a bearer token as a
  * NextMagentaCloud partner app.
  * 
+ * You can call this test with:
+ * ```
+ * cd apps/user_oidc
+ * NMC_URL="https://dev1.next.magentacloud.de" OIDC_REFRESH_TOKEN="<from previous SAM authorisation>" OIDC_CLIENTID="10TVL0SAM300000049***"
+ * OIDC_CLIENTSECRET="FGW2D9BB-***" phpunit --stderr --bootstrap tests/bootstrap.php tests/integration/Bearer --filter=ValidBearerFromRefreshTokenTest
+ * ```
+ * 
  * @group Bearer
  */
-class ValidBearerFromRefreshTokenTest extends \Test\TestCase {
+class ValidBearerFromRefreshTokenTest extends TestCase {
 
-	private $client;
+	protected $client;
+
+	/** @var string */
+	protected $identUrl;
+
+	/** @var App */
+	protected $app;
 
 	public function setUp(): void {
 		parent::setUp();
+		$this->app = new App(Application::APP_ID);
 
-		$this->idpUrl = getenv('IDP_URL', 'https://accounts.login00.idm.ver.sul.t-online.de/oauth2/tokens'); // url of identity provider
 		$this->refreshToken = getenv('OIDC_REFRESH_TOKEN');
-		$this->providername = getenv('OIDC_PROVIDERNAME', 'Telekom'); // optional
-		$this->assertNotFalse($this->idpUrl, "This integration test required setting of env var IDP_URL");
+		$this->clientId = getenv('OIDC_CLIENTID');
+		$this->clientSecret = getenv('OIDC_CLIENTSECRET');
+		$this->nmcUrl = getenv('NMC_URL') ?: 'https://dev1.next.magentacloud.de';
+		$this->identUrl = getenv('IDP_URL') ?: 'https://accounts.login00.idm.ver.sul.t-online.de/oauth2/tokens'; // url of identity provider
+
+		//$this->assertNotFalse($this->identUrl, "This integration test required setting of env var IDP_URL");
 		$this->assertNotFalse($this->refreshToken, "This integration test required setting of env var OIDC_REFRESH_TOKEN");
+		$this->assertNotFalse($this->clientId, "This integration test required setting of env var OIDC_CLIENTID");
+		$this->assertNotFalse($this->clientSecret, "This integration test required setting of env var OIDC_CLIENTSECRET");
 
 		$this->client = new Client(['allow_redirects' => ['track_redirects' => true]]);
-	
-		$this->providerService()
+	}
+
+	public function testEmptyBearer() {
+		$userRequestUrl = $this->nmcUrl . "/ocs/v2.php/apps/user_status/api/v1/user_status";
+		$rawUserResult = $this->client->get($userRequestUrl,
+				[   'headers' => [
+					"OCS-APIRequest" => "true",
+					'Accept' => 'application/json',
+					'Authorization' => 'Bearer     '
+				],
+			]);
+		fwrite(STDERR, $rawUserResult->getBody()->getContents());
+		$userResult = json_decode($rawUserResult->getBody()->getContents());		
 	}
 
 
-	public function testBearerLogin() {
+	/**
+	 * Aquire a token for the user and query Nextcloud user account info
+	 * 
+	 * The corresponding curl commands are:
+	 * curl -X POST "https://accounts.login00.idm.ver.sul.t-online.de/oauth2/tokens" -H "Accept: application/json"\
+	 *   -H "Content-Type: application/x-www-form-urlencoded"\
+	 *   -d "client_id=...&client_secret=...&&grant_type=refresh_token&scope=magentacloud&refresh_token=RT2:..."
+	 * 
+	 * curl -i -H "OCS-APIRequest: true" -H "Authorization:Bearer ..." -X GET 'https://dev2.next.magentacloud.de/ocs/v1.php/cloud/users/anid'
+	 */
+	public function testBearerLoginUserData() {
 		// aquire fresh Bearer token authorized by refresh token from env
-		$this->client->post($this->, ['form_params' => ['client_id' => $username, 'password' => $password, "credentialId" => '']]);
-
-
-		self::assertEquals([
-			[
-				'name' => 'Login with nextcloudci',
-				'href' => '/index.php/apps/user_oidc/login/1'
-			]
-		], OC_App::getAlternativeLogIns());
+		$rawresult = $this->client->post($this->identUrl,
+					[   'headers' => [
+							'Accept' => 'application/json',
+					],
+						'form_params' => [ 'client_id' => $this->clientId,
+										   'client_secret' => $this->clientSecret, 
+										   'grant_type' => 'refresh_token',
+										   'scope' => 'magentacloud',
+										   'refresh_token' => $this->refreshToken] ]);
+		$result = json_decode($rawresult->getBody()->getContents());
+		
+		$bearerToken = $result->access_token;
+		$userRequestUrl = $this->nmcUrl . "/ocs/v2.php/apps/user_status/api/v1/user_status";
+		$rawUserResult = $this->client->get($userRequestUrl,
+					[   'headers' => [
+							"OCS-APIRequest" => "true",
+							'Accept' => 'application/json',
+							'Authorization' => 'Bearer ' . $bearerToken
+						],
+				    ]);
+	    fwrite(STDERR, $rawUserResult->getBody()->getContents());
+		$userResult = json_decode($rawUserResult->getBody()->getContents());
 	}
 
-	public function testLoginRedirect() {
-		$response = $this->client->get($this->baseUrl . '/index.php/apps/user_oidc/login/1');
-		$headersRedirect = $response->getHeader(RedirectMiddleware::HISTORY_HEADER);
-		self::assertStringStartsWith($this->oidcIdp, $headersRedirect[0]);
-	}
 
-	private function newClient() {
-		$cookieJar = new CookieJar();
-		$this->client = new Client(['allow_redirects' => ['track_redirects' => true], 'cookies' => $cookieJar]);
-		return $this->client;
-	}
-	public function testLoginRedirectCallback() {
-		$response = $this->client->get($this->baseUrl . '/index.php/apps/user_oidc/login/1');
-		$headersRedirect = $response->getHeader(RedirectMiddleware::HISTORY_HEADER);
-		self::assertStringStartsWith($this->oidcIdp, $headersRedirect[0]);
-
-		$response = $this->loginToKeycloak($headersRedirect[0], 'keycloak1', 'keycloak1');
-		$headersRedirect = $response->getHeader(RedirectMiddleware::HISTORY_HEADER);
-		$userId = $this->getUserId($response);
-		self::assertStringStartsWith($this->baseUrl . '/index.php/apps/user_oidc/code?', $headersRedirect[0]);
-		self::assertEquals($this->baseUrl . '/index.php/apps/dashboard/', $headersRedirect[1]);
-
-		// Validate login with correct user data
-		$userInfo = json_decode($userInfo->getBody()->getContents());
-		self::assertEquals('keycloak1@example.com', $userInfo->ocs->data->email);
-		self::assertEquals('Key Cloak 1', $userInfo->ocs->data->displayname);
-		self::assertEquals(1073741824, $userInfo->ocs->data->quota->quota); // 1G
-
-		$providerId = '1';
-		$userIdHashed = hash('sha256', $providerId . '_0_' . 'aea81860-b25c-4f75-b9b5-9d632c3ba06f');
-		self::assertEquals($userId, $userIdHashed);
-	}
-
-	private function loginToKeycloak($keycloakURL, $username, $password) {
-		$response = $this->client->get($keycloakURL);
-		$doc = new DOMDocument();
-		$doc->loadHtml($response->getBody()->getContents());
-		$selector = new DOMXpath($doc);
-		$result = $selector->query('//form');
-		$form = $result->item(0);
-		$url = $form->getAttribute('action');
-		libxml_clear_errors();
-	}
-
-	private function getUserId($response) {
-		$content = $response->getBody()->getContents();
-		$doc = new DOMDocument();
-		$doc->loadHtml($content);
-		$body = $doc->getElementsByTagName('head')->item(0);
-		$userId = $body->getAttribute('data-user');
-		libxml_clear_errors();
-		return $userId;
-	}
-
-	public function testUnreachable() {
-		$provider = $this->providerService->getProviderByIdentifier('nextcloudci');
-		/** @var ProviderMapper $mapper */
-		$mapper = \OC::$server->get(ProviderMapper::class);
-
-		$previousDiscovery = $provider->getDiscoveryEndpoint();
-
-		$provider->setDiscoveryEndpoint('http://unreachable/url');
-		$mapper->update($provider);
-
-		try {
-			$client = new Client(['allow_redirects' => ['track_redirects' => true]]);
-			$response = $client->get($this->baseUrl . '/index.php/apps/user_oidc/login/1');
-		} catch (\Exception $e) {
-			$response = $e->getResponse();
-		}
-		$status = $response->getStatusCode();
-
-		$provider->setDiscoveryEndpoint($previousDiscovery);
-		$mapper->update($provider);
-
-		self::assertEquals($status, 404);
-	}
-
-	public function testNonUnique() {
-		$this->providerService->setSetting(1, ProviderService::SETTING_UNIQUE_UID, '0');
-
-		$response = $this->client->get($this->baseUrl . '/index.php/apps/user_oidc/login/1');
-		$headersRedirect = $response->getHeader(RedirectMiddleware::HISTORY_HEADER);
-		$response = $this->loginToKeycloak($headersRedirect[0], 'keycloak1', 'keycloak1');
-		$userId = $this->getUserId($response);
-		self::assertEquals($userId, 'aea81860-b25c-4f75-b9b5-9d632c3ba06f');
-	}
-
-	public function testNonUniqueMapping() {
-		$this->providerService->setSetting(1, ProviderService::SETTING_UNIQUE_UID, '0');
-		$this->providerService->setSetting(1, ProviderService::SETTING_MAPPING_UID, 'preferred_username');
-
-		$response = $this->client->get($this->baseUrl . '/index.php/apps/user_oidc/login/1');
-		$headersRedirect = $response->getHeader(RedirectMiddleware::HISTORY_HEADER);
-		$response = $this->loginToKeycloak($headersRedirect[0], 'keycloak1', 'keycloak1');
-		$userId = $this->getUserId($response);
-		self::assertEquals($userId, 'keycloak1');
-	}
-
-	public function testUniqueMapping() {
-		$this->providerService->setSetting(1, ProviderService::SETTING_MAPPING_UID, 'preferred_username');
-
-		$response = $this->client->get($this->baseUrl . '/index.php/apps/user_oidc/login/1');
-		$headersRedirect = $response->getHeader(RedirectMiddleware::HISTORY_HEADER);
-		$response = $this->loginToKeycloak($headersRedirect[0], 'keycloak1', 'keycloak1');
-		$userId = $this->getUserId($response);
-		self::assertEquals($userId, hash('sha256', '1_0_keycloak1'));
-	}
 }
