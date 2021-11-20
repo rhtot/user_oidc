@@ -27,12 +27,13 @@ namespace OCA\UserOIDC\Service;
 use OCP\ILogger;
 use OCP\AppFramework\Utility\ITimeFactory;
 
+use Jose\Component\Core\JWK;
+use Jose\Component\Core\Algorithm;
 use Jose\Component\Core\AlgorithmManager;
+
 use Jose\Component\Encryption\Compression\CompressionMethodManager;
 use Jose\Component\Encryption\Compression\Deflate;
 use Jose\Component\Encryption\JWEDecrypter;
-
-use Jose\Component\Core\JWK;
 
 use Jose\Component\Encryption\Algorithm\KeyEncryption\PBES2HS512A256KW;
 use Jose\Component\Encryption\Algorithm\KeyEncryption\RSAOAEP256;
@@ -45,169 +46,165 @@ use Jose\Component\Signature\Algorithm\HS512;
 use Jose\Component\Signature\JWSVerifier;
 use Jose\Component\Signature\JWS;
 
-use BAse64Url\Base64Url;
-
 class JwtService {
 
-    /** @var ILogger */
+	/** @var ILogger */
 	private $logger;
 
 	/** @var ITimeFactory */
 	private $timeFactory;
 
-    /** @var DiscoveryService */
+	/** @var DiscoveryService */
 	private $discoveryService;
 
-    public function __construct(ILogger $logger,
-                                ITimeFactory $timeFactory) {
-        $this->logger = $logger;
-        $this->timeFactory = $timeFactory;
-        
-        // The key encryption algorithm manager with the A256KW algorithm.
-        $keyEncryptionAlgorithmManager = new AlgorithmManager([
-            new PBES2HS512A256KW(),
-            new RSAOAEP256(),
-            new ECDHESA256KW() ]);
-        
-        // The content encryption algorithm manager with the A256CBC-HS256 algorithm.
-        $contentEncryptionAlgorithmManager = new AlgorithmManager([
-            new A256CBCHS512(),
-        ]);
-        
-        // The compression method manager with the DEF (Deflate) method.
-        $compressionMethodManager = new CompressionMethodManager([
-            new Deflate(),
-        ]);
-        
-        $signatureAlgorithmManager = new AlgorithmManager([
-            new HS256(),
-            new HS384(),
-            new HS512(),
-        ]);
+	public function __construct(ILogger $logger,
+								ITimeFactory $timeFactory) {
+		$this->logger = $logger;
+		$this->timeFactory = $timeFactory;
+		
+		// The key encryption algorithm manager with the A256KW algorithm.
+		$keyEncryptionAlgorithmManager = new AlgorithmManager([
+			new PBES2HS512A256KW(),
+			new RSAOAEP256(),
+			new ECDHESA256KW() ]);
+		
+		// The content encryption algorithm manager with the A256CBC-HS256 algorithm.
+		$contentEncryptionAlgorithmManager = new AlgorithmManager([
+			new A256CBCHS512(),
+		]);
+		
+		// The compression method manager with the DEF (Deflate) method.
+		$compressionMethodManager = new CompressionMethodManager([
+			new Deflate(),
+		]);
+		
+		$signatureAlgorithmManager = new AlgorithmManager([
+			new HS256(),
+			new HS384(),
+			new HS512(),
+		]);
 
-        // We instantiate our JWE Decrypter.
-        $this->jweDecrypter = new JWEDecrypter(
-            $keyEncryptionAlgorithmManager,
-            $contentEncryptionAlgorithmManager,
-            $compressionMethodManager
-        );
+		// We instantiate our JWE Decrypter.
+		$this->jweDecrypter = new JWEDecrypter(
+			$keyEncryptionAlgorithmManager,
+			$contentEncryptionAlgorithmManager,
+			$compressionMethodManager
+		);
 
-        // We instantiate our JWS Verifier.
-        $this->jwsVerifier = new JWSVerifier(
-            $signatureAlgorithmManager
-        );
+		// We instantiate our JWS Verifier.
+		$this->jwsVerifier = new JWSVerifier(
+			$signatureAlgorithmManager
+		);
 
-        // The serializer manager. We only use the JWE Compact Serialization Mode.
-        $this->serializerManager = new \Jose\Component\Signature\Serializer\JWSSerializerManager([
-            new \Jose\Component\Signature\Serializer\CompactSerializer(),
-            ]);
+		// The serializer manager. We only use the JWE Compact Serialization Mode.
+		$this->serializerManager = new \Jose\Component\Signature\Serializer\JWSSerializerManager([
+			new \Jose\Component\Signature\Serializer\CompactSerializer(),
+		]);
+	}
+	
+	/**
+	 * Implement JOSE decryption for SAM3 tokens
+	 */
+	public function decryptToken(string $rawToken, string $decryptKey) : JWS {
+
+		// web-token library does not like underscores in headers, so replace them with - (which is valid in JWT)
+		$numSegments = substr_count($rawToken, '.') + 1;
+		$this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $rawToken);
+		if ($numSegments > 3) {
+			// trusted authenticator and myself share the client secret,
+			// so use it is used for encrypted web tokens
+			$clientSecret = new JWK([
+				'kty' => 'oct',
+				'k' => $decryptKey
+			]);
+			
+			// We try to load the token.
+			$encryptionSerializerManager = new \Jose\Component\Encryption\Serializer\JWESerializerManager([
+				new \Jose\Component\Encryption\Serializer\CompactSerializer(),
+			]);
+			$jwe = $this->encryptionSerializerManager->unserialize($rawToken);
+		
+			// We decrypt the token. This method does NOT check the header.
+			if ($this->jweDecrypter->decryptUsingKey($jwe, $clientSecret, 0)) {
+				return $this->serializerManager->unserialize($jwe->getPayload());
+			} else {
+				throw new InvalidTokenException('Unknown bearer encryption format');
+			}
+		} else {
+			return $this->serializerManager->unserialize($rawToken);
+		}
+	}
+
+	/**
+	 * Get claims (even before verification to access e.g. aud standard field ...)
+	 * Transform them in a format compatible with id_token representation.
+	 */
+	public function decodeClaims(JWS $decodedToken) : object {
+		$this->logger->debug("Telekom SAM3 access token: " . $decodedToken->getPayload());
+		
+		$samContent = json_decode($decodedToken->getPayload(), false);
 
 
-        $this->encryptionSerializerManager = new \Jose\Component\Encryption\Serializer\JWESerializerManager([
-            new \Jose\Component\Encryption\Serializer\CompactSerializer(),
-            ]);
-        
-    }
-    
-    /**
-     * Implement JOSE decryption for SAM3 tokens
-     */
-    public function decryptToken(string $rawToken, string $decryptKey ) : JWS {
-        // web-token library does not like underscores in headers, so replace them with - (which is valid in JWT)
-        $numSegments = substr_count($rawToken, '.')+1;
-        $this->logger->debug('Bearer access token(segments=' . $numSegments . ')=' . $rawToken);
-        if ($numSegments>3) {
-            // trusted authenticator and myself share the client secret,
-            // so use it is used for encrypted web tokens
-            $clientSecret = new JWK([
-                'kty' => 'oct',
-                'k' => $decryptKey
-            ]);
-            // We try to load the token.
-            $jwe = $this->encryptionSerializerManager->unserialize($rawToken);
-        
-            // We decrypt the token. This method does NOT check the header.
-            if ( $this->jweDecrypter->decryptUsingKey($jwe, $clientSecret, 0) ) {
-                return $this->serializerManager->unserialize($jwe->getPayload());
-            } else {
-                throw new InvalidTokenException('Unknown bearer encryption format');    
-            }
-        } else {
-            return $this->serializerManager->unserialize($rawToken);
-        }
-    }
+		// adapt into OpenId id_token format (as far as possible)
+		$claims = new \stdClass();
+        $claims->aud = $samContent->aud;
+        $claims->iss = $samContent->iss;
+        $claims->sub = $samContent->sub;
+        $claims->iat = $samContent->iat;
+        $claims->nbf = $samContent->nbf;
+        $claims->exp = $samContent->exp;
 
-    /**
-     * Get claims (even before verification to access e.g. aud standard field ...)
-     * Transform them in a format compatible with id_token representation.
-     */
-    public function decodeClaims(JWS $decodedToken) : object {
-        $this->logger->debug("Telekom SAM3 access token: " . $decodedToken->getPayload());
-        
-        $samContent = json_decode($decodedToken->getPayload(), false);
-        $claimArray = $samContent->{'urn:telekom.com:idm:at:attributes'};
-
-        // adapt into OpenId id_token format (as far as possible)
-        $payload = array(
-            'aud' => $samContent->aud,
-            'iss' => $samContent->iss,
-            'sub' => $samContent->sub,
-            'iat' => $samContent->iat,
-            'nbf' => $samContent->nbf,
-            'exp' => $samContent->exp,
-        ); 
         // remap all the custom claims
-        foreach ( $claimArray as $claimKeyValue ) {
-            $payload['urn:telekom.com:' . $claimKeyValue->name] = $claimKeyValue->value;
-        }
+		$claimArray = $samContent->{'urn:telekom.com:idm:at:attributes'};        
+		foreach ($claimArray as $claimKeyValue) {
+			$claims->{'urn:telekom.com:' . $claimKeyValue->name} = $claimKeyValue->value;
+		}
 
-        $claims = (object)$payload;
-        $this->logger->debug("Adapted OpenID-like token; " . json_encode($claims));
-        return $claims;
-    }
+		$this->logger->debug("Adapted OpenID-like token; " . json_encode($claims));
+		return $claims;
+	}
 
 
-    public function verifySignature(JWS $decodedToken, string $signKey) {
-        $accessSecret = new JWK([
-            'kty' => 'oct',
-            'k'   => $signKey 
-        ]); // TODO: take the additional access key secret from settings
+	public function verifySignature(JWS $decodedToken, string $signKey) {
+		$accessSecret = new JWK([
+			'kty' => 'oct',
+			'k' => $signKey
+		]); // TODO: take the additional access key secret from settings
 
-        if (!$this->jwsVerifier->verifyWithKey($decodedToken, $accessSecret, 0)) {
-            throw new SignatureException('Invalid Signature');
-        }
-    }
+		if (!$this->jwsVerifier->verifyWithKey($decodedToken, $accessSecret, 0)) {
+			throw new SignatureException('Invalid Signature');
+		}
+	}
 
-    public function verifyClaims(object $claims, array $audiences = [], int $leeway = 60) {
-        $timestamp = $this->timeFactory->getTime();
+	public function verifyClaims(object $claims, array $audiences = [], int $leeway = 60) {
+		$timestamp = $this->timeFactory->getTime();
 
-        // Check the nbf if it is defined. This is the time that the
-        // token can actually be used. If it's not yet that time, abort.
-        if (isset($claims->nbf) && $claims->nbf > ($timestamp + $leeway)) {
-            throw new InvalidTokenException(
-                'Cannot handle token prior to ' . \date(DateTime::ISO8601, $claims->nbf)
-            );
-        }
+		// Check the nbf if it is defined. This is the time that the
+		// token can actually be used. If it's not yet that time, abort.
+		if (isset($claims->nbf) && $claims->nbf > ($timestamp + $leeway)) {
+			throw new InvalidTokenException(
+				'Cannot handle token prior to ' . \date(DateTime::ISO8601, $claims->nbf)
+			);
+		}
 
-        // Check that this token has been created before 'now'. This prevents
-        // using tokens that have been created for later use (and haven't
-        // correctly used the nbf claim).
-        if (isset($claims->iat) && $claims->iat > ($timestamp + $leeway)) {
-            throw new InvalidTokenException(
-                'Cannot handle token prior to ' . \date(DateTime::ISO8601, $claims->iat)
-            );
-        }
+		// Check that this token has been created before 'now'. This prevents
+		// using tokens that have been created for later use (and haven't
+		// correctly used the nbf claim).
+		if (isset($claims->iat) && $claims->iat > ($timestamp + $leeway)) {
+			throw new InvalidTokenException(
+				'Cannot handle token prior to ' . \date(DateTime::ISO8601, $claims->iat)
+			);
+		}
 
-        // Check if this token has expired.
-        if (isset($claims->exp) && ($timestamp - $leeway) >= $claims->exp) {
-            throw new InvalidTokenException('Expired token');
-        }
+		// Check if this token has expired.
+		if (isset($claims->exp) && ($timestamp - $leeway) >= $claims->exp) {
+			throw new InvalidTokenException('Expired token');
+		}
 
-        // Check target audience (if given)
-        // Check if this token has expired.
-        if (!empty(array_intersect($claims->aud, $audiences))) {
-            throw new InvalidTokenException('No acceptable audience in token.');
-        }
-    }
-
+		// Check target audience (if given)
+		// Check if this token has expired.
+		if (empty(array_intersect($claims->aud, $audiences))) {
+			throw new InvalidTokenException('No acceptable audience in token.');
+		}
+	}
 }
