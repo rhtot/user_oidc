@@ -24,41 +24,37 @@
 declare(strict_types=1);
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Cookie\CookieJar;
-use GuzzleHttp\RedirectMiddleware;
 
 use OCA\UserOIDC\AppInfo\Application;
 
 use OCP\AppFramework\App;
 
-use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\TestCase;
 
 /**
  * This integration test gets a valid refresh token (from test env)
  * and reproduces all the steps to a bearer authentication
  * with a valid bearer token.
- * 
+ *
  * If you are authorized with the OpenID Connect provider, you can find the
  * refresh token in the response of the provider:
  * ```
  * {..."refresh_token":\"THIS_IS_THE_RIGHT_ONE", "scope":"userinfo","token_type":"Bearer" ...
  * ```
- * 
+ *
  * It also practically documents the way to get a bearer token as a
  * NextMagentaCloud partner app.
- * 
+ *
  * You can call this test with:
  * ```
  * cd apps/user_oidc
  * NMC_URL="https://dev1.next.magentacloud.de" OIDC_REFRESH_TOKEN="<from previous SAM authorisation>" OIDC_CLIENTID="10TVL0SAM300000049***"
  * OIDC_CLIENTSECRET="FGW2D9BB-***" phpunit --stderr --bootstrap tests/bootstrap.php tests/integration/Bearer --filter=ValidBearerFromRefreshTokenTest
  * ```
- * 
+ *
  * @group Bearer
  */
 class ValidBearerFromRefreshTokenTest extends TestCase {
-
 	protected $client;
 
 	/** @var string */
@@ -85,55 +81,69 @@ class ValidBearerFromRefreshTokenTest extends TestCase {
 		$this->client = new Client(['allow_redirects' => ['track_redirects' => true]]);
 	}
 
-	public function testEmptyBearer() {
-		$userRequestUrl = $this->nmcUrl . "/ocs/v2.php/apps/user_status/api/v1/user_status";
+	public function xtestEmptyBearer() {
+        $this->expectException(GuzzleHttp\Exception\ClientException::class); // see server log for details atm, better status handling todo
+		$userRequestUrl = $this->nmcUrl . "/apps/user_oidc/bearertest";
 		$rawUserResult = $this->client->get($userRequestUrl,
 				[   'headers' => [
 					"OCS-APIRequest" => "true",
 					'Accept' => 'application/json',
 					'Authorization' => 'Bearer     '
 				],
-			]);
-		fwrite(STDERR, $rawUserResult->getBody()->getContents());
-		$userResult = json_decode($rawUserResult->getBody()->getContents());		
+				]);
+		//fwrite(STDERR, $rawUserResult->getBody()->getContents());
+		$userResult = json_decode($rawUserResult->getBody()->getContents());
 	}
+
+	public function xtestNoAuthorization() {
+        $this->expectException(GuzzleHttp\Exception\ServerException::class); // see server log for details atm, better status handling todo
+		$userRequestUrl = $this->nmcUrl . "/apps/user_oidc/bearertest";
+		$rawUserResult = $this->client->get($userRequestUrl,
+                    [   'headers' => [
+                        "OCS-APIRequest" => "true",
+                        'Accept' => 'application/json',
+                    ],
+				]);
+		//fwrite(STDERR, $rawUserResult->getBody()->getContents());
+		$userResult = json_decode($rawUserResult->getBody()->getContents());
+	}
+
 
 
 	/**
 	 * Aquire a token for the user and query Nextcloud user account info
-	 * 
+	 *
 	 * The corresponding curl commands are:
 	 * curl -X POST "https://accounts.login00.idm.ver.sul.t-online.de/oauth2/tokens" -H "Accept: application/json"\
 	 *   -H "Content-Type: application/x-www-form-urlencoded"\
 	 *   -d "client_id=...&client_secret=...&&grant_type=refresh_token&scope=magentacloud&refresh_token=RT2:..."
-	 * 
+	 *
 	 * curl -i -H "OCS-APIRequest: true" -H "Authorization:Bearer ..." -X GET 'https://dev2.next.magentacloud.de/ocs/v1.php/cloud/users/anid'
 	 */
 	public function testBearerLoginUserData() {
 		// aquire fresh Bearer token authorized by refresh token from env
 		$rawresult = $this->client->post($this->identUrl,
 					[   'headers' => [
-							'Accept' => 'application/json',
+						'Accept' => 'application/json',
 					],
 						'form_params' => [ 'client_id' => $this->clientId,
-										   'client_secret' => $this->clientSecret, 
-										   'grant_type' => 'refresh_token',
-										   'scope' => 'magentacloud',
-										   'refresh_token' => $this->refreshToken] ]);
+							'client_secret' => $this->clientSecret,
+							'grant_type' => 'refresh_token',
+							'scope' => 'magentacloud',
+							'refresh_token' => $this->refreshToken] ]);
 		$result = json_decode($rawresult->getBody()->getContents());
 		
 		$bearerToken = $result->access_token;
-		$userRequestUrl = $this->nmcUrl . "/ocs/v2.php/apps/user_status/api/v1/user_status";
+        //fwrite(STDERR, PHP_EOL . $bearerToken);
+		$userRequestUrl = $this->nmcUrl . "/apps/user_oidc/bearertest";
 		$rawUserResult = $this->client->get($userRequestUrl,
 					[   'headers' => [
-							"OCS-APIRequest" => "true",
-							'Accept' => 'application/json',
-							'Authorization' => 'Bearer ' . $bearerToken
-						],
-				    ]);
-	    fwrite(STDERR, $rawUserResult->getBody()->getContents());
+						"OCS-APIRequest" => "true",
+						'Accept' => 'application/json',
+						'Authorization' => 'Bearer ' . $bearerToken
+					],
+					]);
+		//fwrite(STDERR, $rawUserResult->getBody()->getContents());
 		$userResult = json_decode($rawUserResult->getBody()->getContents());
 	}
-
-
 }
