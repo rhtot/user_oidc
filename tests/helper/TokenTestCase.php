@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace OCA\UserOIDC\TestHelper;
 
-use PHPUnit\Framework\Assert;
+use OCP\AppFramework\App;
+
 use PHPUnit\Framework\TestCase;
 
+use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Service\JwtService;
 
 use Jose\Component\Core\AlgorithmManager;
 use Jose\Component\Core\JWK;
-use Jose\Component\Core\Util\JsonConverter;
 
-use Jose\Component\Signature\Serializer\CompactSerializer;
 use Jose\Component\Signature\Algorithm\HS256;
 use Jose\Component\Signature\JWSBuilder;
 use Jose\Component\Signature\JWS;
@@ -42,7 +42,7 @@ class TokenTestCase extends TestCase {
 	protected $jwtService;
 
 	/**
-	 * Real world example claims content 
+	 * Real world example claims content
 	 */
 	private $realExampleClaims;
 
@@ -80,7 +80,7 @@ class TokenTestCase extends TestCase {
 					'authenticatingAuthority' => null,
 					'authNInstant' => time() )
 			),
-			'aud' => ['http:\\auth.magentacloud.de'],
+			'aud' => ['http://auth.magentacloud.de'],
 			'jti' => 'STS-1e22a06f-790c-40fb-ad1d-6de2ddcf2431',
 			'urn:telekom.com:idm:at:attributes' => [
 				array( 'name' => 'client_id',
@@ -152,12 +152,12 @@ class TokenTestCase extends TestCase {
 		if (!$invalidate) {
 			$jwk = new JWK([
 				'kty' => 'oct',
-				'k' => $signKey]);	
+				'k' => $signKey]);
 		} else {
 			// use a different key for an invalid signature
 			$jwk = new JWK([
 				'kty' => 'oct',
-				'k' => 'BnWHlEdffC0hfKSxrh01g7/M3djHIiOU6jNwJChYWP8=']);	
+				'k' => 'BnWHlEdffC0hfKSxrh01g7/M3djHIiOU6jNwJChYWP8=']);
 		}
 		// We instantiate our JWS Builder.
 		$jwsBuilder = new JWSBuilder($algorithmManager);
@@ -165,9 +165,9 @@ class TokenTestCase extends TestCase {
 		$jws = $jwsBuilder->create()                               // We want to create a new JWS
 							->withPayload(json_encode($claims))                   // We set the payload
 							->addSignature($jwk, ['alg' => 'HS256']) // We add a signature with a simple protected header
-							->build();  
+							->build();
 
-	    return $jws;
+		return $jws;
 	}
 
 	protected function setupSignedToken(array $claims, string $signKey) {
@@ -180,8 +180,8 @@ class TokenTestCase extends TestCase {
 		$keyEncryptionAlgorithmManager = new AlgorithmManager([
 			new PBES2HS512A256KW(),
 			new RSAOAEP256(),
-			new ECDHESA256KW() 
-			]);
+			new ECDHESA256KW()
+		]);
 		// The content encryption algorithm manager with the A256CBC-HS256 algorithm.
 		$contentEncryptionAlgorithmManager = new AlgorithmManager([
 			new A256CBCHS512(),
@@ -201,7 +201,7 @@ class TokenTestCase extends TestCase {
 				$keyEncryptionAlgorithmManager,
 				$contentEncryptionAlgorithmManager,
 				$compressionMethodManager
-			);						  
+			);
 
 		$jwe = $jweBuilder
 			->create()                                         // We want to create a new JWE

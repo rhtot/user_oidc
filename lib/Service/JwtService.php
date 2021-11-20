@@ -91,6 +91,12 @@ class JwtService {
 			$compressionMethodManager
 		);
 
+		// We try to load the token.
+		$this->encryptionSerializerManager = new \Jose\Component\Encryption\Serializer\JWESerializerManager([
+			new \Jose\Component\Encryption\Serializer\CompactSerializer(),
+		]);
+
+
 		// We instantiate our JWS Verifier.
 		$this->jwsVerifier = new JWSVerifier(
 			$signatureAlgorithmManager
@@ -118,10 +124,6 @@ class JwtService {
 				'k' => $decryptKey
 			]);
 			
-			// We try to load the token.
-			$encryptionSerializerManager = new \Jose\Component\Encryption\Serializer\JWESerializerManager([
-				new \Jose\Component\Encryption\Serializer\CompactSerializer(),
-			]);
 			$jwe = $this->encryptionSerializerManager->unserialize($rawToken);
 		
 			// We decrypt the token. This method does NOT check the header.
@@ -147,15 +149,15 @@ class JwtService {
 
 		// adapt into OpenId id_token format (as far as possible)
 		$claims = new \stdClass();
-        $claims->aud = $samContent->aud;
-        $claims->iss = $samContent->iss;
-        $claims->sub = $samContent->sub;
-        $claims->iat = $samContent->iat;
-        $claims->nbf = $samContent->nbf;
-        $claims->exp = $samContent->exp;
+		$claims->aud = $samContent->aud;
+		$claims->iss = $samContent->iss;
+		$claims->sub = $samContent->sub;
+		$claims->iat = $samContent->iat;
+		$claims->nbf = $samContent->nbf;
+		$claims->exp = $samContent->exp;
 
-        // remap all the custom claims
-		$claimArray = $samContent->{'urn:telekom.com:idm:at:attributes'};        
+		// remap all the custom claims
+		$claimArray = $samContent->{'urn:telekom.com:idm:at:attributes'};
 		foreach ($claimArray as $claimKeyValue) {
 			$claims->{'urn:telekom.com:' . $claimKeyValue->name} = $claimKeyValue->value;
 		}
