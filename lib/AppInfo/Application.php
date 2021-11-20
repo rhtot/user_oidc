@@ -28,71 +28,55 @@ namespace OCA\UserOIDC\AppInfo;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Service\ID4MeService;
 use OCA\UserOIDC\Service\SettingsService;
-use OCA\UserOIDC\Service\OIDCService;
-use OCA\UserOIDC\Service\JwtService;
-use OCA\UserOIDC\Service\ProviderService;
-use OCA\UserOIDC\Service\UserService;
-use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\User\Backend;
 use OCP\AppFramework\App;
+use OCP\AppFramework\Bootstrap\IBootstrap;
+use OCP\AppFramework\Bootstrap\IBootContext;
+use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
-use OCP\IUserManager;
 use OCP\IUserSession;
+use OCP\IUserManager;
 
-class Application extends App {
+class Application extends App implements IBootstrap {
 	public const APP_ID = 'user_oidc';
 	public const OIDC_API_REQ_HEADER = 'Authorization';
 
-	public function __construct(array $urlParams = []) {
-		parent::__construct(self::APP_ID, $urlParams);
+	public function __construct() {
+		parent::__construct(self::APP_ID);
 	}
 
-	public function register() {
+	public function register(IRegistrationContext $context): void {
+		// Register the composer autoloader for packages shipped by this app, if applicable
+		include_once __DIR__ . '/../../vendor/autoload.php';
+
+		$backend = $this->getContainer()->query(Backend::class);
+		$userManager = $this->getContainer()->query(IUserManager::class);
+		$userManager->registerBackend($backend);
+        \OC_User::useBackend($backend);
+    }
+
+	public function boot(IBootContext $context): void {
 		/** @var IUserSession $userSession */
 		$userSession = $this->getContainer()->query(IUserSession::class);
 
-		/** @var IUserManager $userManager */
-		$userManager = $this->getContainer()->query(IUserManager::class);
-
-		/** @var ProviderMapper $providerMapper */
-		$providerMapper = $this->getContainer()->query(ProviderMapper::class);
-
-		/** @var DiscoveryService $discoveryService */
-		$discoveryService = $this->getContainer()->query(DiscoveryService::class);
-
-		/** @var ProviderService $providerService */
-		$providerService = $this->getContainer()->query(ProviderService::class);
-
-		/** @var UserService $userService */
-		$userService = $this->getContainer()->query(UserService::class);
-
-		/** @var OIDCService $oidcService */
-		$oidcService = $this->getContainer()->query(OIDCService::class);
-
-		/** @var JwtService $jwtService */
-		$jwtService = $this->getContainer()->query(JwtService::class);
-
-		/* Register our own user backend */
-		$backend = $this->getContainer()->query(Backend::class);
-		$userManager->registerBackend($backend);
-		\OC_User::useBackend($backend);
-
 		if (!$userSession->isLoggedIn()) {
+
+			/** @var ProviderMapper $providerMapper */
+			$providerMapper = $this->getContainer()->query(ProviderMapper::class);
+			$providers = $providerMapper->getProviders();
 
 			/** @var IURLGenerator $urlGenerator */
 			$urlGenerator = $this->getContainer()->query(IURLGenerator::class);
 
-			$providers = $providerMapper->getProviders();
-
 			/** @var IL10N $l10n */
 			$l10n = $this->getContainer()->query(IL10N::class);
-			/** @var IRequest $request */
-			$request = $this->getContainer()->query(IRequest::class);
 			/** @var SettingsService $settings */
 			$settings = $this->getContainer()->query(SettingsService::class);
 
+			/** @var IRequest $request */
+			$request = $this->getContainer()->query(IRequest::class);
 			$redirectUrl = $request->getParam('redirect_url');
 
 			// Handle immediate redirect to the oidc provider if just one is configured and no other backens are allowed
@@ -102,6 +86,7 @@ class Application extends App {
 			} catch (\Exception $e) {
 				// in case any errors happen when checkinf for the path do not apply redirect logic as it is only needed for the login
 			}
+
 			if ($isDefaultLogin && !$settings->getAllowMultipleUserBackEnds() && count($providers) === 1) {
 				$targetUrl = $urlGenerator->linkToRoute(self::APP_ID . '.login.login', [
 					'providerId' => $providers[0]->getId(),
