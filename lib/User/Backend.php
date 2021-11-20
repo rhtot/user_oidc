@@ -144,7 +144,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// not sure if we should rather to the validation in here as otherwise it might fail for other backends or bave other side effects
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		// Authorization is also send for other tokens, so make sure the handling here only goes for bearer
-		//return $headerToken !== '';
 		return (preg_match('/^\s*bearer\s+/i', $headerToken) != false);
 	}
 
@@ -156,6 +155,24 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	}
 
 	/**
+	 * This function sets an https status code here (early in the failing backend operation)
+	 * to pass on bearer errors cleanly with correct status code and a readable reason
+	 * 
+	 * For this,  there is a "tricky" setting of a header needed to make it working in all
+	 * known situations, see
+	 * https://stackoverflow.com/questions/3258634/php-how-to-send-http-response-code
+	 */
+	protected function sendHttpStatus(int $httpStatusCode, string $httpStatusMsg) {
+		$phpSapiName    = substr(php_sapi_name(), 0, 3);
+		if ($phpSapiName == 'cgi' || $phpSapiName == 'fpm') {
+			header('Status: ' . $httpStatusCode . ' ' . $httpStatusMsg);
+		} else {
+			$protocol = isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0';
+			header($protocol . ' ' . $httpStatusCode . ' ' . $httpStatusMsg);
+		}
+	}
+
+	/**
 	 * Return the id of the current user
 	 * @return string
 	 * @since 6.0.0
@@ -164,8 +181,10 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		$rawToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
+        $this->logger->debug('BearerToken to check is: ' . $rawToken);
 		if ($rawToken === '') {
 			$this->logger->warning('Authorization header without bearer token received');
+			$this->setStatus(403, "empty bearer token");
 			return '';
 		}
 
