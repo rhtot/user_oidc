@@ -37,18 +37,13 @@ use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\User\Backend;
 
 //use OCA\UserOIDC\Db\User;
-use OCP\IUser;
 use OCA\UserOIDC\Db\UserMapper;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\JwtService;
-use OCA\UserOIDC\Service\SignatureException;
-use OCA\UserOIDC\Service\InvalidTokenException;
-
-use PHPUnit\Framework\Assert;
-use PHPUnit\Framework\TestCase;
+use OCA\UserOIDC\Event\UserAccountChangeResult;
 
 class HeaderBearerTokenTest extends TokenTestCase {
 
@@ -110,20 +105,20 @@ class HeaderBearerTokenTest extends TokenTestCase {
 
 		$this->providerService = new ProviderService($this->config, $this->providerMapper);
 		
-		$user = $this->createMock(IUser::class);
-		$user->expects($this->any())
-			->method('getUID')
-			->willReturn('1200490100000000100XXXXX');
-		$user->expects($this->any())
-			->method('getDisplayName')
-			->willReturn('nmc01');
-		$user->expects($this->any())
-			->method('getEMailAddress')
-			->willReturn('nmc01@ver.sul.t-online.de');
 		$this->userService = $this->createMock(UserService::class);
 		$this->userService->expects($this->any())
-			->method("userFromToken")
-			->willReturn($user);
+			->method('determineUID')
+			->willReturn('1200490100000000100XXXXX');
+		$this->userService->expects($this->any())
+			->method('determineDisplayname')
+			->willReturn('nmc01');
+		$this->userService->expects($this->any())
+			->method('determineEmail')
+			->willReturn('nmc01@ver.sul.t-online.de');
+		$this->userService->expects($this->any())
+			->method('determineQuota')
+			->willReturn('1TB');
+
 
 		$this->backend = new Backend($app->getContainer()->get(ILogger::class),
 								$this->requestMock,
@@ -133,7 +128,6 @@ class HeaderBearerTokenTest extends TokenTestCase {
 								$this->userService,
 								$app->getContainer()->get(DiscoveryService::class),
 								$app->getContainer()->get(JwtService::class));
-
 	}
 
 	public function testValidSignature() {
@@ -142,7 +136,10 @@ class HeaderBearerTokenTest extends TokenTestCase {
 						->method('getHeader')
 						->with($this->equalTo(Application::OIDC_API_REQ_HEADER))
 						->willReturn("Bearer " . $testtoken);
-
+		$this->userService->expects($this->once())
+						->method("changeUserAccount")
+						->willReturn(new UserAccountChangeResult(true, "Created"));
+			
 		$this->assertTrue($this->backend->isSessionActive());
 		$this->assertEquals('1200490100000000100XXXXX', $this->backend->getCurrentUserId());
 	}
@@ -165,13 +162,22 @@ class HeaderBearerTokenTest extends TokenTestCase {
 						->method('getHeader')
 						->with($this->equalTo(Application::OIDC_API_REQ_HEADER))
 						->willReturn("Bearer " . $testtoken);
+		
+        $result = new UserAccountChangeResult(true, "Created");
+        $this->assertTrue($result->isAccessAllowed());
+        $this->assertEquals('Created', $result->getReason());
+        $this->assertNull($result->getRedirectUrl());
+
+        $this->userService->expects($this->once())
+						->method("changeUserAccount")
+						->willReturn($result);
 
 		$this->assertTrue($this->backend->isSessionActive());
 		$this->assertEquals('1200490100000000100XXXXX', $this->backend->getCurrentUserId());
 	}
 
 	public function testEncryptedInvalidSignature() {
-		$invalidEncToken = $this->setupSignEncryptToken($this->getRealExampleClaims(), 
+		$invalidEncToken = $this->setupSignEncryptToken($this->getRealExampleClaims(),
 								$this->getTestBearerSecret(), true);
 		$this->requestMock->expects($this->any())
 						->method('getHeader')
@@ -181,5 +187,4 @@ class HeaderBearerTokenTest extends TokenTestCase {
 		$this->assertTrue($this->backend->isSessionActive());
 		$this->assertEquals('', $this->backend->getCurrentUserId());
 	}
-
 }

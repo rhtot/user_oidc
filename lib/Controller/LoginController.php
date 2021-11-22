@@ -302,22 +302,35 @@ class LoginController extends Controller {
 		// }
 
 		try {
-			$user = $this->userService->userFromToken($provider, $payload);
+	     	$uid = $this->userService->determineUID($providerId, $payload);
+	        $displayName = $this->userService->determineDisplayname($providerId, $payload);
+	        $email = $this->userService->determineEmail($providerId, $payload);
+         	$quota = $this->userService->determineQuota($providerId, $payload);
+			//$user = $this->userService->userFromToken($provider, $payload);
 		} catch (AttributeValueException $eAttribute) {
 			return new JSONResponse($eAttribute->getMessage(), Http::STATUS_NOT_ACCEPTABLE);
 		}
 
-		$this->logger->debug('Complete user login, make session');	
-		$this->userSession->setUser($user);
-		$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
-		$this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
+        $userReaction = $this->userService->changeUserAccount($uid, $displayname, $email, $quota, $payload);
+		if ($userReaction->isAccessAllowed()) {
+            $this->logger->info("{$uid}: user accepted by OpenId web authorization");
+			$user = $this->userManager->get($uid);
+			$this->userSession->setUser($user);
+			$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
+			$this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
+        } else {
+            $this->logger->info("{$uid}: user rejected by OpenId web authorization, reason: " + $userReaction->getReason() );
+        }
 
-		$this->logger->debug('Redirecting user');
-		$redirectUrl = $this->session->get(self::REDIRECT_AFTER_LOGIN);
-		if ($redirectUrl) {
-			return new RedirectResponse($redirectUrl);
-		}
-
-		return new RedirectResponse(\OC_Util::getDefaultPageUrl());
+		if ($userReaction->getRedirectUrl() != null) {
+            // redirect determined by business event rules
+            return new RedirectResponse($userReaction->getRedirectUrl());
+        } else if ($userReaction->isAccessAllowed()) {
+            // positive default
+            return new RedirectResponse($this->session->get(self::REDIRECT_AFTER_LOGIN));
+        } else {
+            // negative default
+            return new RedirectResponse(\OC_Util::getDefaultPageUrl());
+        }
 	}
 }

@@ -26,9 +26,6 @@ declare(strict_types=1);
 namespace OCA\UserOIDC\Service;
 
 use OCA\UserOIDC\Event\AttributeMappedEvent;
-use OCA\UserOIDC\Service\AttributeValueException;
-use OCA\UserOIDC\Service\ProviderService;
-use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\Provider;
 use OCA\UserOIDC\Db\UserMapper;
 use OCP\EventDispatcher\IEventDispatcher;
@@ -37,7 +34,7 @@ use OCP\IUserManager;
 
 class UserService {
 
-    /** @var IEventDispatcher */
+	/** @var IEventDispatcher */
 	private $eventDispatcher;
 
 	/** @var ILogger */
@@ -53,10 +50,10 @@ class UserService {
 	private $providerService;
 
 	public function __construct(IEventDispatcher $eventDispatcher,
-		                        ILogger $logger,
-		                        UserMapper $userMapper,
-		                        IUserManager $userManager,
-                                ProviderService $providerService ) {
+								ILogger $logger,
+								UserMapper $userMapper,
+								IUserManager $userManager,
+								ProviderService $providerService) {
 		$this->eventDispatcher = $eventDispatcher;
 		$this->logger = $logger;
 		$this->userMapper = $userMapper;
@@ -64,15 +61,15 @@ class UserService {
 		$this->providerService = $providerService;
 	}
 
-	protected function determineUID(int $providerid, object $payload) {
+	public function determineUID(int $providerid, object $payload) {
 		$uidAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_UID, 'sub');
 		$mappedUserId = $payload->{$uidAttribute} ?? null;
 		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_UID, $payload, $mappedUserId);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
-	} 
+	}
 
-	protected function determineDisplayname(int $providerid, object $payload) {
+	public function determineDisplayname(int $providerid, object $payload) {
 		$displaynameAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_DISPLAYNAME, 'displayname');
 		$mappedDisplayName = $payload->{$displaynameAttribute} ?? null;
 
@@ -84,64 +81,71 @@ class UserService {
 		}
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
-	} 
+	}
 
-	protected function determineEmail(int $providerid, object $payload) {
+	public function determineEmail(int $providerid, object $payload) {
 		$emailAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_EMAIL, 'email');
 		$mappedEmail = $payload->{$emailAttribute} ?? null;
 		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_EMAIL, $payload, $mappedEmail);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
-	} 
+	}
 
-	protected function determineQuota(int $providerid, object $payload) {
+	public function determineQuota(int $providerid, object $payload) {
 		$quotaAttribute = $this->providerService->getSetting($providerid, ProviderService::SETTING_MAPPING_QUOTA, 'quota');
 		$mappedQuota = $payload->{$quotaAttribute} ?? null;
 		$event = new AttributeMappedEvent(ProviderService::SETTING_MAPPING_QUOTA, $payload, $mappedQuota);
 		$this->eventDispatcher->dispatchTyped($event);
 		return $event->getValue();
-	} 
+	}
+
+	public function changeUserAccount(string $uid, string $displayName, String $email, string $quota, object $payload) {
+		$event = new UserAccountChangeEvent($uid, $displayName, $email, $quota, $payload);
+		$this->eventDispatcher->dispatchTyped($event);
+        return $event->getResult();
+    }
+
 
 	/**
-	 * Extract mapped values from token claims, 
+	 * Extract mapped values from token claims,
 	 * emit event to consider complex business rules that may override claim mapping,
 	 * create OIDC user if not existing,
 	 * update user fields in case of a change
-	 */	
-    public function userFromToken(Provider $provider, object $payload) : object {
+	 */
+	// public function userFromToken(Provider $provider, object $payload) : object {
 		
-		$providerId = $provider->getId();
-		$uid = $this->determineUID($providerId, $payload);
-		if (is_null($uid)) {
-			throw new AttributeValueException("cannot determine userId from token"); 
-		}
-		$backendUser = $this->userMapper->getOrCreate($providerId, $uid);
-		$this->logger->debug($backendUser->getUserId() . ': Backend user obtained.');
-		$user = $this->userManager->get($backendUser->getUserId());
-		$this->logger->debug($backendUser->getUserId() . ': Associated account available');
-		if (is_null($uid)) {
-			throw new AttributeValueException("backend user without associated account found"); 
-		}
+	// 	$providerId = $provider->getId();
+	// 	$uid = $this->determineUID($providerId, $payload);
+	// 	if (is_null($uid)) {
+	// 		throw new AttributeValueException("cannot determine userId from token");
+	// 	}
+	// 	$backendUser = $this->userMapper->getOrCreate($providerId, $uid);
+	// 	$this->logger->debug($backendUser->getUserId() . ': Backend user obtained.');
+	// 	$user = $this->userManager->get($backendUser->getUserId());
+	// 	$this->logger->debug($backendUser->getUserId() . ': Associated account available');
+	// 	if (is_null($uid)) {
+	// 		throw new AttributeValueException("backend user without associated account found");
+	// 	}
 
-		$displayName = $this->determineDisplayname($providerId, $payload);
-		if (isset($displayName) && ($displayName != $backendUser->getDisplayName())) {
-			// only modify on change
-			$backendUser->setDisplayName($displayName);
-			$backendUser = $this->userMapper->update($backendUser);
-		}
+	// 	$displayName = $this->determineDisplayname($providerId, $payload);
+	// 	if (isset($displayName) && ($displayName != $backendUser->getDisplayName())) {
+	// 		// only modify on change
+	// 		$backendUser->setDisplayName($displayName);
+	// 		$backendUser = $this->userMapper->update($backendUser);
+	// 	}
 
-		$email = $this->determineEmail($providerId, $payload);
-		if (isset($email) && ($email != $user->getEMailAddress())) {
-			// only modify on change
-			$user->setEMailAddress($email);
-		}
+	// 	$email = $this->determineEmail($providerId, $payload);
+	// 	if (isset($email) && ($email != $user->getEMailAddress())) {
+	// 		// only modify on change
+	// 		$user->setEMailAddress($email);
+	// 	}
 
-		$quota = $this->determineQuota($providerId, $payload);
-		if (isset($quota) && ($quota != $user->getQuota())) {
-			// only modify on change
-			$user->setQuota($quota);
-		}
-    
-		return $user;
-	}
+	// 	$quota = $this->determineQuota($providerId, $payload);
+	// 	if (isset($quota) && ($quota != $user->getQuota())) {
+	// 		// only modify on change
+	// 		$user->setQuota($quota);
+	// 	}
+	
+	// 	return $user;
+	// }
 }

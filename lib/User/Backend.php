@@ -31,8 +31,6 @@ use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\JwtService;
 use OCA\UserOIDC\Service\SignatureException;
 use OCA\UserOIDC\Service\AttributeValueException;
-use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
-use OCA\UserOIDC\User\Validator\UserInfoValidator;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\UserMapper;
@@ -157,13 +155,13 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	/**
 	 * This function sets an https status code here (early in the failing backend operation)
 	 * to pass on bearer errors cleanly with correct status code and a readable reason
-	 * 
+	 *
 	 * For this,  there is a "tricky" setting of a header needed to make it working in all
 	 * known situations, see
 	 * https://stackoverflow.com/questions/3258634/php-how-to-send-http-response-code
 	 */
 	protected function sendHttpStatus(int $httpStatusCode, string $httpStatusMsg) {
-		$phpSapiName    = substr(php_sapi_name(), 0, 3);
+		$phpSapiName = substr(php_sapi_name(), 0, 3);
 		if ($phpSapiName == 'cgi' || $phpSapiName == 'fpm') {
 			header('Status: ' . $httpStatusCode . ' ' . $httpStatusMsg);
 		} else {
@@ -181,40 +179,50 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		$rawToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
-        $this->logger->debug('BearerToken to check is: ' . $rawToken);
+		$this->logger->debug('BearerToken to check is: ' . $rawToken);
 		if ($rawToken === '') {
 			$this->logger->warning('Authorization header without bearer token received');
 			$this->setStatus(403, "empty bearer token");
 			return '';
 		}
 
-		foreach ($this->providerMapper->getProviders() as $provider) {			
+		foreach ($this->providerMapper->getProviders() as $provider) {
 			try {
 				$bearerToken = $this->jwtService->decryptToken($rawToken, Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993'));
 				$this->jwtService->verifySignature($bearerToken, Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993'));
 				$claims = $this->jwtService->decodeClaims($bearerToken);
 				$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
-				// check audience (for JWT and SAM case)
-				$clientId = $provider->getClientId();
+				$this->logger->debug('Valid bearer token: ' . json_encode($claims));
 	
+				$providerId = $provider->getId();
 				try {
-					$this->logger->debug('Decoded bearer token: ' . json_encode($claims));
-					$user = $this->userService->userFromToken($provider, $claims);
-					$this->logger->info('User ' . $user->getUID() . ' authorized by Bearer');
-					return $user->getUID();
+					$uid = $this->userService->determineUID($providerId, $claims);
+					$displayname = $this->userService->determineDisplayname($providerId, $claims);
+					$email = $this->userService->determineEmail($providerId, $claims);
+					$quota = $this->userService->determineQuota($providerId, $claims);
 				} catch (AttributeValueException $eAttribute) {
-					$this->logger->error('Invalid token (access) claims:' . $eAttribute->getMessage());
+					$this->logger->error('Invalid token (access) claims value:' . $eAttribute->getMessage());
 					return '';
 				}
-			}
-			catch (SignatureException $eSignature) {
+
+				$userReaction = $this->userService->changeUserAccount($uid, $displayname, $email, $quota, $claims);
+				if ($userReaction->isAccessAllowed()) {
+					$this->logger->info("{$uid}: Bearer authorized");
+					return $uid;
+				} else {
+					$this->logger->info("{$uid}: Bearer rejected, " + $userReaction->getReason());
+					return '';
+				}
+			} catch (SignatureException $eSignature) {
 				// only the key seems not to fit, so try the next provider
 				$this->logger->debug($eSignature->getMessage() . ". Trying another provider.");
 				continue;
-			} 
-			catch (\Throwable $e) {
-				// there is
-				$this->logger->error('Invalid token (general):' . $e->getMessage());
+			} catch (\Throwable $e) {
+				$this->logger->logException($e, [
+					'message' => 'Invalid token (general):' . $e->getMessage(),
+					'level' => ILogger::ERROR,
+					'app' => 'user_oidc'
+				]);
 				return '';
 			}
 		}
