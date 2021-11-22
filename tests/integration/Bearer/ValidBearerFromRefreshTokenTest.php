@@ -81,7 +81,7 @@ class ValidBearerFromRefreshTokenTest extends TestCase {
 		$this->client = new Client(['allow_redirects' => ['track_redirects' => true]]);
 	}
 
-	public function xtestEmptyBearer() {
+	public function testEmptyBearer() {
         $this->expectException(GuzzleHttp\Exception\ClientException::class); // see server log for details atm, better status handling todo
 		$userRequestUrl = $this->nmcUrl . "/apps/user_oidc/bearertest";
 		$rawUserResult = $this->client->get($userRequestUrl,
@@ -95,8 +95,8 @@ class ValidBearerFromRefreshTokenTest extends TestCase {
 		$userResult = json_decode($rawUserResult->getBody()->getContents());
 	}
 
-	public function xtestNoAuthorization() {
-        $this->expectException(GuzzleHttp\Exception\ServerException::class); // see server log for details atm, better status handling todo
+	public function testNoAuthorization() {
+        $this->expectException(GuzzleHttp\Exception\ClientException::class); // see server log for details atm, better status handling todo
 		$userRequestUrl = $this->nmcUrl . "/apps/user_oidc/bearertest";
 		$rawUserResult = $this->client->get($userRequestUrl,
                     [   'headers' => [
@@ -145,5 +145,8 @@ class ValidBearerFromRefreshTokenTest extends TestCase {
 					]);
 		//fwrite(STDERR, $rawUserResult->getBody()->getContents());
 		$userResult = json_decode($rawUserResult->getBody()->getContents());
+        $this->assertObjectHasAttribute('username', $userResult);
+        $this->assertEquals(24, strlen($userResult->username));
+        $this->assertStringStartsWith("120049", $userResult->username);
 	}
 }
