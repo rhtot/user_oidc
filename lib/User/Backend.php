@@ -94,7 +94,11 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 			$this->userMapper->delete($user);
 			return true;
 		} catch (Exception $e) {
-			$this->logger->error('Failed to delete user', [ 'exception' => $e ]);
+            $this->logger->logException($e, [
+                'message' => 'Failed to delete OIDC user:' . $e->getMessage(),
+                'level' => ILogger::ERROR,
+                'app' => 'user_oidc'
+            ]);
 			return false;
 		}
 	}
