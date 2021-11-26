@@ -25,9 +25,9 @@ declare(strict_types=1);
 
 namespace OCA\UserOIDC\Event;
 
-use OCA\UserOIDC\Event;
+use OCP\EventDispatcher\Event;
 
-use OCP\EventDispatcher\Event\UserAccountChangeResult;
+use OCA\UserOIDC\Event\UserAccountChangeResult;
 
 /**
  * Event to provide custom mapping logic based on the OIDC token data
@@ -52,9 +52,8 @@ class UserAccountChangeEvent extends Event {
 		$this->displayname = $displayname;
 		$this->mainEmail = $mainEmail;
 		$this->quota = $quota;
-
 		$this->claims = $claims;
-		$this->$result = new UserAccountChangeResult(false, 'default');
+		$this->result = new UserAccountChangeResult($accessAllowed, 'default');
 	}
 
 	/**
