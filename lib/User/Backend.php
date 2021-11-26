@@ -30,6 +30,7 @@ use OCA\UserOIDC\Service\UserService;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\JwtService;
 use OCA\UserOIDC\Service\SignatureException;
+use OCA\UserOIDC\Service\InvalidTokenException;
 use OCA\UserOIDC\Service\AttributeValueException;
 use OCA\UserOIDC\User\Validator\SelfEncodedValidator;
 use OCA\UserOIDC\User\Validator\UserInfoValidator;
@@ -181,17 +182,18 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		// get the bearer token from headers
 		$headerToken = $this->request->getHeader(Application::OIDC_API_REQ_HEADER);
 		$rawToken = preg_replace('/^\s*bearer\s+/i', '', $headerToken);
-        $this->logger->debug('BearerToken to check is: ' . $rawToken);
 		if ($rawToken === '') {
 			$this->logger->warning('Authorization header without bearer token received');
-			$this->setStatus(403, "empty bearer token");
+			//$this->setStatus(403, "empty bearer token");
 			return '';
 		}
 
 		foreach ($this->providerMapper->getProviders() as $provider) {			
 			try {
-				$bearerToken = $this->jwtService->decryptToken($rawToken, Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993'));
-				$this->jwtService->verifySignature($bearerToken, Base64Url::encode('JQ17C99A-DAF8-4E27-FBW4-GV23B043C993'));
+                $sharedSecret = $provider->getBearerSecret();
+                $this->logger->debug('Using B64 bearer secret:' . $sharedSecret);
+                $bearerToken = $this->jwtService->decryptToken($rawToken, $provider->getBearerSecret());
+				$this->jwtService->verifySignature($bearerToken, $provider->getBearerSecret());
 				$claims = $this->jwtService->decodeClaims($bearerToken);
 				$this->jwtService->verifyClaims($claims, ['http://auth.magentacloud.de']);
 				// check audience (for JWT and SAM case)
@@ -212,10 +214,16 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				$this->logger->debug($eSignature->getMessage() . ". Trying another provider.");
 				continue;
 			} 
+			catch (InvalidTokenException $eToken) {
+				// there is
+				$this->logger->error('Invalid token:' . $eToken->getMessage());
+				return '';
+			}
 			catch (\Throwable $e) {
 				// there is
-				$this->logger->error('Invalid token (general):' . $e->getMessage());
-				return '';
+				$this->logger->debug('General non matching provider problem:' . $e->getMessage());
+				continue;
+				//return '';
 			}
 		}
 
