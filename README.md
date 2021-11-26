@@ -71,6 +71,14 @@ parameter to the login URL.
 sudo -u www-data php var/www/nextcloud/occ config:app:set --value=0 user_oidc allow_multiple_user_backends
 ```
 
+### Running integration tests
+
+```
+NMC_URL="https://int1.next.magentacloud.de" OIDC_REFRESH_TOKEN="<from previous SAM authorisation>" OIDC_CLIENTID="10TVL0SAM300000049***"\
+ OIDC_CLIENTSECRET="FGW2D9BB-***" phpunit --stderr --bootstrap tests/bootstrap.php tests/integration/Bearer\ 
+ --filter=ValidBearerFromRefreshTokenTest
+```
+
 ## Building the app
 
 Requirements for building:
@@ -82,11 +90,15 @@ Requirements for building:
 The app uses [krankerl](https://github.com/ChristophWurst/krankerl) to build the release archive from the git repository.
 The release will be put into `build/artifacts/` when running the `krankerl package`.
 
+IT IS NOT RECOMMENDED TO BUILD THE TELEKOM VERSION WITH KRANKERL AS IT DELETES WILDLY src DIRECTORIES in vendor dir
+
 The app can also be built without krankerl by manually running:
 ```
 composer install --no-dev -o
 npm ci
 npm run build
+cd ..
+tar -cvz --exclude=user_oidc/src --exclude=user_oidc/tests --exclude="node_modules" --exclude="user_oidc/build" --exclude=".*" -f user_oidc-1.1.6-nmc1.tar.gz user_oidc
 ```
 
 On Ubuntu 20.04, a possible way to get build working is with matching npm and node versions is:
