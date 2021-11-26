@@ -93,7 +93,8 @@ class HeaderBearerTokenTest extends TokenTestCase {
 			]);
 
         $this->configBearerToken = 'JQ17C99A-DAF8-4E27-FBW4-GV23B043C993';
-        $this->b64BearerToken = Base64Url::encode($this->configBearerToken);
+        //$this->b64BearerToken = Base64Url::encode($this->configBearerToken);
+        $this->b64BearerToken = 'SlExN0M5OUEtREFGOC00RTI3LUZCVzQtR1YyM0IwNDNDOTkz';
 
 		$this->providerMapper = $this->createMock(ProviderMapper::class);
 		$providers = [

@@ -193,7 +193,6 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		foreach ($this->providerMapper->getProviders() as $provider) {
 			try {
                 $sharedSecret = $provider->getBearerSecret();
-                $this->logger->debug('Using B64 bearer secret:' . $sharedSecret);
                 $bearerToken = $this->jwtService->decryptToken($rawToken, $provider->getBearerSecret());
 				$this->jwtService->verifySignature($bearerToken, $provider->getBearerSecret());
 				$claims = $this->jwtService->decodeClaims($bearerToken);
@@ -221,18 +220,17 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				}
 			} catch (SignatureException $eSignature) {
 				// only the key seems not to fit, so try the next provider
-				$this->logger->debug($eSignature->getMessage() . ". Trying another provider.");
+				$this->logger->debug("Invalid sign: " . $eSignature->getMessage());
 				continue;
-
 			} 
 			catch (InvalidTokenException $eToken) {
 				// there is
-				$this->logger->error('Invalid token:' . $eToken->getMessage());
+				$this->logger->error('Invalid token: ' . $eToken->getMessage());
 				return '';
 			}
 			catch (\Throwable $e) {
 				// there is
-				$this->logger->debug('General non matching provider problem:' . $e->getMessage());
+				$this->logger->debug('Non matching provider, continue: ' . $e->getMessage());
 				continue;
 				//return '';
 			}
