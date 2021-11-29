@@ -280,7 +280,7 @@ class LoginController extends Controller {
 		$clientId = $provider->getClientId();
 		if ($payload->aud !== $clientId && !in_array($clientId, $payload->aud, true)) {
 			$this->logger->error("Invalid token (access): Token signature ok, but audience does not fit!");
-			return '';
+			return new JSONResponse(['invalid audience'], Http::STATUS_UNAUTHORIZED);
 		}
 
 		// TODO: may also add code_verifier
@@ -314,7 +314,7 @@ class LoginController extends Controller {
 
         $userReaction = $this->userService->changeUserAccount($uid, $displayname, $email, $quota, $payload);
 		if ($userReaction->isAccessAllowed()) {
-            $this->logger->info("{$uid}: user accepted by OpenId web authorization");
+            $this->logger->info("{$uid}: user accepted by OpenId web authorization, reason: " . $userReaction->getReason() );
 			$user = $this->userManager->get($uid);
 			$this->userSession->setUser($user);
 			$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
@@ -328,10 +328,14 @@ class LoginController extends Controller {
             return new RedirectResponse($userReaction->getRedirectUrl());
         } else if ($userReaction->isAccessAllowed()) {
             // positive default
-            return new RedirectResponse($this->session->get(self::REDIRECT_AFTER_LOGIN));
+            $successRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
+            if ($succesRedirect == null) {
+                $successRedirect = \OC_Util::getDefaultPageUrl();
+            }
+            return new RedirectResponse($successRedirect);
         } else {
             // negative default
-            return new RedirectResponse(\OC_Util::getDefaultPageUrl());
+            return new JSONResponse([ $userReaction->getReason(); ], Http::STATUS_UNAUTHORIZED);
         }
 	}
 }
