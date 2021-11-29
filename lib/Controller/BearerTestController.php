@@ -33,7 +33,7 @@ use OCP\IUserSession;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\AppFramework\ApiController;
+use OCP\AppFramework\Controller;
 
 use OCA\UserOIDC\AppInfo\Application;
 
@@ -41,22 +41,20 @@ use OCA\UserOIDC\AppInfo\Application;
  * Simple endpoint to easily testing bearer implementation
  * from outside server installation
  */
-class BearerTestController extends ApiController {
+class BearerTestController extends Controller {
 	
 	/** @var ILogger */
 	private $logger;
-	
-	/** @var IRequest */
-	protected $request;
 
 	/** @var IUserSession */
 	private $userSession;
 
-	public function __construct(IRequest $request,
+	public function __construct($appName,
+                            IRequest $request,
 							ILogger $logger,
 							IUserSession $userSession) {
-		$this->request = $request;
-		$this->logger = $logger;
+        parent::__construct($appName, $request);
+        $this->logger = $logger;
 		$this->userSession = $userSession;
 	}
 	
