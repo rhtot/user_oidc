@@ -26,6 +26,7 @@ declare(strict_types=1);
 namespace OCA\UserOIDC\Service;
 
 use OCA\UserOIDC\Event\AttributeMappedEvent;
+use OCA\UserOIDC\Event\UserAccountChangeEvent;
 use OCA\UserOIDC\Db\Provider;
 use OCA\UserOIDC\Db\UserMapper;
 use OCP\EventDispatcher\IEventDispatcher;
@@ -99,7 +100,7 @@ class UserService {
 		return $event->getValue();
 	}
 
-	public function changeUserAccount(string $uid, string $displayName, String $email, string $quota, object $payload) {
+	public function changeUserAccount(string $uid, ?string $displayName, ?string $email, ?string $quota, object $payload) {
 		$event = new UserAccountChangeEvent($uid, $displayName, $email, $quota, $payload);
 		$this->eventDispatcher->dispatchTyped($event);
         return $event->getResult();
