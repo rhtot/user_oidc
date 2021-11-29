@@ -303,7 +303,7 @@ class LoginController extends Controller {
 
 		try {
 	     	$uid = $this->userService->determineUID($providerId, $payload);
-	        $displayName = $this->userService->determineDisplayname($providerId, $payload);
+	        $displayname = $this->userService->determineDisplayname($providerId, $payload);
 	        $email = $this->userService->determineEmail($providerId, $payload);
          	$quota = $this->userService->determineQuota($providerId, $payload);
 			//$user = $this->userService->userFromToken($provider, $payload);
