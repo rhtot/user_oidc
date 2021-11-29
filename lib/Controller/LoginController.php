@@ -29,6 +29,7 @@ namespace OCA\UserOIDC\Controller;
 
 use OCA\UserOIDC\Event\AttributeMappedEvent;
 use OCA\UserOIDC\Event\TokenObtainedEvent;
+use OCA\UserOIDC\Event\UserAccountChangeEvent;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
@@ -319,7 +320,7 @@ class LoginController extends Controller {
 			$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
 			$this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
         } else {
-            $this->logger->info("{$uid}: user rejected by OpenId web authorization, reason: " + $userReaction->getReason() );
+            $this->logger->info("{$uid}: user rejected by OpenId web authorization, reason: " . $userReaction->getReason() );
         }
 
 		if ($userReaction->getRedirectUrl() != null) {

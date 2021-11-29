@@ -37,14 +37,13 @@ use OCA\UserOIDC\Event\UserAccountChangeResult;
  */
 class UserAccountChangeEvent extends Event {
 
-	/** @var object */
-	private $claims;
+    private $uid;
+    private $displayname;
+    private $mainEmail;
+    private $quota;
+    private $claims;
+    private $result;
 
-	/** @var $loginAllowed */
-	private $loginAllowed;
-
-	/** @var string */
-	private $redirectUrl;
 
 	public function __construct(string $uid, ?string $displayname, ?string $mainEmail, ?string $quota, object $claims, bool $accessAllowed = false) {
 		parent::__construct();
