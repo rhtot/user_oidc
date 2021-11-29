@@ -325,6 +325,7 @@ class LoginController extends Controller {
 
 		if ($userReaction->getRedirectUrl() != null) {
             // redirect determined by business event rules
+            $this->logger->debug("{$uid}: Custom redirect to: " . $userReaction->getRedirectUrl() );
             return new RedirectResponse($userReaction->getRedirectUrl());
         } else if ($userReaction->isAccessAllowed()) {
             // positive default
@@ -332,10 +333,11 @@ class LoginController extends Controller {
             if ($succesRedirect == null) {
                 $successRedirect = \OC_Util::getDefaultPageUrl();
             }
+            $this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect );
             return new RedirectResponse($successRedirect);
         } else {
             // negative default
-            return new JSONResponse([ $userReaction->getReason(); ], Http::STATUS_UNAUTHORIZED);
+            return new JSONResponse([ $userReaction->getReason() ], Http::STATUS_UNAUTHORIZED);
         }
 	}
 }
