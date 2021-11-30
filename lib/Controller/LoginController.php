@@ -330,7 +330,7 @@ class LoginController extends Controller {
         } else if ($userReaction->isAccessAllowed()) {
             // positive default
             $successRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
-            if ($succesRedirect == null) {
+            if ($successRedirect == null) {
                 $successRedirect = \OC_Util::getDefaultPageUrl();
             }
             $this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect );
