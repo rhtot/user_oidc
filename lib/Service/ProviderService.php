@@ -40,6 +40,9 @@ class ProviderService {
 	public const SETTING_MAPPING_EMAIL = 'mappingEmail';
 	public const SETTING_MAPPING_QUOTA = 'mappingQuota';
 
+	public const SETTING_JWKS_CACHE = 'jwksCache';
+	public const SETTING_JWKS_CACHE_TIMESTAMP = 'jwksCacheTimestamp';
+
 	/** @var IConfig */
 	private $config;
 	/** @var ProviderMapper */

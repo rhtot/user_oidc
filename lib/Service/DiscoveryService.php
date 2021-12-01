@@ -31,18 +31,25 @@ use OCP\Http\Client\IClientService;
 use Psr\Log\LoggerInterface;
 
 class DiscoveryService {
+	public const INVALIDATE_JWKS_CACHE_AFTER_SECONDS = 3600;
+
+    public const SETTING_JWKS_CACHE = 'jwksCache';
+	public const SETTING_JWKS_CACHE_TIMESTAMP = 'jwksCacheTimestamp';
 
 	/** @var LoggerInterface */
 	private $logger;
 
 	/** @var IClientService */
 	private $clientService;
+	/**
+	 * @var ProviderService
+	 */
+	private $providerService;
 
-	private $cached_jwks = null;
-
-	public function __construct(LoggerInterface $logger, IClientService $clientService) {
+	public function __construct(LoggerInterface $logger, IClientService $clientService, ProviderService $providerService) {
 		$this->logger = $logger;
 		$this->clientService = $clientService;
+		$this->providerService = $providerService;
 	}
 
 	public function obtainDiscovery(Provider $provider): array {
@@ -55,38 +62,24 @@ class DiscoveryService {
 		return json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
 	}
 
-
-
-
-	/**
-	 *  
-	 * Cache once retrieved jwks on each node to speed avoid
-	 * unnneccessary roundtrips for bearer tokens.
-	 * 
-	 * Each compute node will retreive jwks keys once and then only use the
-	 * cached ones.
-	 */
 	public function obtainJWK(Provider $provider): array {
-
-		if (is_null($this->cached_jwks)) {
+		$lastJwksRefresh = $this->providerService->getSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE_TIMESTAMP);
+		if ($lastJwksRefresh !== '' && (int) $lastJwksRefresh > time() - self::INVALIDATE_JWKS_CACHE_AFTER_SECONDS) {
+			$rawJwks = $this->providerService->getSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE);
+			$rawJwks = json_decode($rawJwks, true);
+			$jwks = JWK::parseKeySet($rawJwks);
+		} else {
 			$discovery = $this->obtainDiscovery($provider);
 			$client = $this->clientService->newClient();
-			$this->cached_jwks = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
+			$responseBody = $client->get($discovery['jwks_uri'])->getBody();
+			$result = json_decode($responseBody, true);
+			$jwks = JWK::parseKeySet($result);
+			// cache jwks
+			$this->providerService->setSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE, $responseBody);
+			$this->providerService->setSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE_TIMESTAMP, strval(time()));
 		}
 
-		return JWK::parseKeySet($this->cached_jwks);
+		$this->logger->debug('Parsed the jwks');
+		return $jwks;
 	}
-
-	public function obtainKeyByAlg(Provider $provider, string $alg): array {
-
-		if (is_null($this->cached_jwks)) {
-			$discovery = $this->obtainDiscovery($provider);
-			$client = $this->clientService->newClient();
-			$this->cached_jwks = json_decode($client->get($discovery['jwks_uri'])->getBody(), true);
-		}
-
-		return JWK::parseKeySet($this->cached_jwks);
-	}
-
-
 }
