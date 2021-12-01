@@ -154,7 +154,21 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	 * {@inheritdoc}
 	 */
 	public function getLogoutUrl() {
-		return '';
+        // TODO: for now, we only support logout with 'Telekom' provider
+        $provider = 'Telekom';
+        $provider = $this->providerService->getProviderByIdentifier($provider);
+        if ( $provider != null ) {
+            try {
+                $discovery = $this->discoveryService->obtainDiscovery($provider);
+            } catch (\Exception $e) {
+				$this->logger->error('Could not reach provider at URL ' . $provider->getDiscoveryEndpoint());
+				return '';
+			}
+            return $discovery['logout_endpoint'] ?? '';            	
+        } else {
+            // TODO: lacking a good strategy for multiple providers yet
+	    	return '';
+        }
 	}
 
 	/**
