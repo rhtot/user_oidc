@@ -39,16 +39,92 @@ class LogoutController extends Controller {
 
     /** @var ILogger */
 	private $logger;
-	
+
+    /** @var ISession */
+	private $session;
+
+    /** @var IUserSession */
+	private $userSession;
+
+    /** @var ProviderService */
+	private $providerService;
+
+	/** @var DiscoveryService */
+	private $discoveryService;
+
+
 	public function __construct(
 		IRequest $request,
 		ILogger $logger,
+        ISession $session,
+        IUserSession $userSession,
+        ProviderService $providerService,
+		DiscoveryService $discoveryService
 	) {
 		parent::__construct(Application::APP_ID, $request);
 
 		$this->logger = $logger;
+        $this->session = $session;
+        $this->userSession = $userSession;
+        $this->providerService = $providerService;
+        $this->discoverService = $discoveryService;
 	}
 
+    protected function defaultLoginPage() {
+        $loginRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
+        if ($loginRedirect == null) {
+            $loginRedirect = \OC_Util::getDefaultPageUrl();
+        }
+        return $loginRedirect;
+    }
+
+    protected function ssoLogoutPage() {
+        $provider = 'Telekom';
+        $provider = $this->providerService->getProviderByIdentifier($provider);
+        if ( $provider != null ) {
+            try {
+                $discovery = $this->discoveryService->obtainDiscovery($provider);
+            } catch (\Exception $e) {
+                $this->logger->error('Could not reach provider at URL ' . $provider->getDiscoveryEndpoint());
+                return new RedirectResponse($this->defaultLoginPage());
+            }
+            $ssoPage = $discovery['logout_endpoint'];
+            $this->logger->debug("Logout with endpoint " . $ssoPage);
+            if (!is_null($ssoPage)) {
+                return new RedirectResponse($ssoPage);
+            } else {
+                return new RedirectResponse($this->defaultLoginPage());
+            }
+        } else {
+            // TODO: lacking a good strategy for multiple providers yet
+            return new RedirectResponse($this->defaultLoginPage());
+        }
+
+    }
+
+
+	/**
+	 * @NoCSRFRequired
+     * @UseSession
+     */
+	public function sessionlogout() {
+        $loginToken = $this->request->getCookie('nc_token');
+		if (!is_null($loginToken)) {
+			$this->config->deleteUserValue($this->userSession->getUser()->getUID(), 'login_token', $loginToken);
+		}
+		$this->userSession->logout();
+
+		$this->session->set('clearingExecutionContexts', '1');
+		$this->session->close();
+
+        // TODO: for now, we only support logout with 'Telekom' provider
+        $response = $this->ssoLogoutPage();
+
+		if (!$this->request->isUserAgent([Request::USER_AGENT_CHROME, Request::USER_AGENT_ANDROID_MOBILE_CHROME])) {
+			$response->addHeader('Clear-Site-Data', '"cache", "storage"');
+		}
+        return $response;
+    }
 
 	/**
 	 * @PublicPage

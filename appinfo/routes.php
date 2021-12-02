@@ -28,6 +28,7 @@ return [
 		['name' => 'login#login', 'url' => '/login/{providerId}', 'verb' => 'GET'],
 		['name' => 'login#code', 'url' => '/code', 'verb' => 'GET'],
         ['name' => 'logout#logout', 'url' => '/logout', 'verb' => 'POST'],
+        ['name' => 'logout#sessionlogout', 'url' => '/sessionlogout', 'verb' => 'GET'],
 		['name' => 'id4me#showLogin', 'url' => '/id4me', 'verb' => 'GET'],
 		['name' => 'id4me#login', 'url' => '/id4me', 'verb' => 'POST'],
 		['name' => 'id4me#code', 'url' => '/id4me/code', 'verb' => 'GET'],

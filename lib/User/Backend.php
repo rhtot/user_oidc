@@ -38,6 +38,8 @@ use OCA\UserOIDC\Db\UserMapper;
 
 use OCP\ILogger;
 use OCP\IRequest;
+use OCP\IURLGenerator;
+
 use OCP\User\Backend\ABackend;
 use OCP\User\Backend\ICustomLogout;
 use OCP\User\Backend\IGetDisplayNameBackend;
@@ -55,6 +57,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	private $logger;
 	/** @var IRequest */
 	private $request;
+	/** @var IURLGenerator */
+	private $urlGenerator;
 	/** @var UserMapper */
 	private $userMapper;
 	/** @var ProviderMapper */
@@ -70,6 +74,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 
 	public function __construct(ILogger $logger,
 								IRequest $request,
+                                IURLGenerator $urlGenerator,
 								ProviderMapper $providerMapper,
 								ProviderService $providerService,
 								UserMapper $userMapper,
@@ -79,6 +84,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		$this->userMapper = $userMapper;
 		$this->logger = $logger;
 		$this->request = $request;
+        $this->urlGenerator = $urlGenerator;
 		$this->providerMapper = $providerMapper;
 		$this->providerService = $providerService;
 		$this->userService = $userService;
@@ -155,23 +161,8 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	 * {@inheritdoc}
 	 */
 	public function getLogoutUrl() : string {
-        // TODO: for now, we only support logout with 'Telekom' provider
-        $provider = 'Telekom';
-        $provider = $this->providerService->getProviderByIdentifier($provider);
-        if ( $provider != null ) {
-            try {
-                $discovery = $this->discoveryService->obtainDiscovery($provider);
-            } catch (\Exception $e) {
-				$this->logger->error('Could not reach provider at URL ' . $provider->getDiscoveryEndpoint());
-				return '';
-			}
-            $this->logger->debug("Logout with endpoint " . $discovery['logout_endpoint']);
-            return $discovery['logout_endpoint'] ?? '';            	
-        } else {
-            // TODO: lacking a good strategy for multiple providers yet
-	    	return '';
-        }
-	}
+        return $this->urlGenerator->linkToRoute(Application::APP_ID . '.LogoutController.sessionlogout');
+    }
 
 	/**
 	 * This function sets an https status code here (early in the failing backend operation)
