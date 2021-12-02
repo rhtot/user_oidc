@@ -39,6 +39,7 @@ use OCA\UserOIDC\Db\UserMapper;
 use OCP\ILogger;
 use OCP\IRequest;
 use OCP\User\Backend\ABackend;
+use OCP\User\Backend\ICustomLogout;
 use OCP\User\Backend\IGetDisplayNameBackend;
 use OCP\User\Backend\IPasswordConfirmationBackend;
 
@@ -49,7 +50,7 @@ use OCP\DB\Exception;
 
 use Base64Url\Base64Url;
 
-class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisplayNameBackend, IApacheBackend {
+class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisplayNameBackend, IApacheBackend, ICustomLogout {
 	/** @var ILogger */
 	private $logger;
 	/** @var IRequest */
@@ -153,7 +154,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	/**
 	 * {@inheritdoc}
 	 */
-	public function getLogoutUrl() {
+	public function getLogoutUrl() : string {
         // TODO: for now, we only support logout with 'Telekom' provider
         $provider = 'Telekom';
         $provider = $this->providerService->getProviderByIdentifier($provider);
@@ -164,6 +165,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 				$this->logger->error('Could not reach provider at URL ' . $provider->getDiscoveryEndpoint());
 				return '';
 			}
+            $this->logger->debug("Logout with endpoint " . $discovery['logout_endpoint']);
             return $discovery['logout_endpoint'] ?? '';            	
         } else {
             // TODO: lacking a good strategy for multiple providers yet
