@@ -161,7 +161,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 	 * {@inheritdoc}
 	 */
 	public function getLogoutUrl() : string {
-        return $this->urlGenerator->linkToRoute(Application::APP_ID . '.LogoutController.sessionlogout');
+        return $this->urlGenerator->linkToRoute(Application::APP_ID . '.logout.sessionlogout');
     }
 
 	/**

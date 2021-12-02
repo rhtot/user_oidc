@@ -34,6 +34,12 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\ILogger;
 use OCP\IRequest;
+use OCP\ISession;
+use OCP\IUserSession;
+
+use OCA\UserOIDC\Service\DiscoveryService;
+use OCA\UserOIDC\Service\ProviderService;
+
 
 class LogoutController extends Controller {
 
@@ -67,7 +73,7 @@ class LogoutController extends Controller {
         $this->session = $session;
         $this->userSession = $userSession;
         $this->providerService = $providerService;
-        $this->discoverService = $discoveryService;
+        $this->discoveryService = $discoveryService;
 	}
 
     protected function defaultLoginPage() {
@@ -99,15 +105,16 @@ class LogoutController extends Controller {
             // TODO: lacking a good strategy for multiple providers yet
             return new RedirectResponse($this->defaultLoginPage());
         }
-
     }
 
 
 	/**
+     * @NoAdminRequired
 	 * @NoCSRFRequired
      * @UseSession
      */
 	public function sessionlogout() {
+        $this->logger->debug("Logout for user " . $this->userSession->getUser()->getUID());
         $loginToken = $this->request->getCookie('nc_token');
 		if (!is_null($loginToken)) {
 			$this->config->deleteUserValue($this->userSession->getUser()->getUID(), 'login_token', $loginToken);
