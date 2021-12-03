@@ -28,10 +28,12 @@ declare(strict_types=1);
 namespace OCA\UserOIDC\Controller;
 
 use OCA\UserOIDC\AppInfo\Application;
+use OCA\UserOIDC\Controller\LoginController;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\RedirectResponse;
 use OCP\ILogger;
 use OCP\IRequest;
 use OCP\ISession;
@@ -42,6 +44,10 @@ use OCA\UserOIDC\Service\ProviderService;
 
 
 class LogoutController extends Controller {
+	private const REDIRECT_AFTER_LOGIN = 'oidc.redirect';
+
+	public const USER_AGENT_CHROME = '/^Mozilla\/5\.0 \([^)]+\) AppleWebKit\/[0-9.]+ \(KHTML, like Gecko\)( Ubuntu Chromium\/[0-9.]+|) Chrome\/[0-9.]+ (Mobile Safari|Safari)\/[0-9.]+( (Vivaldi|Brave|OPR)\/[0-9.]+|)$/';
+	public const USER_AGENT_ANDROID_MOBILE_CHROME = '#Android.*Chrome/[.0-9]*#';
 
     /** @var ILogger */
 	private $logger;
@@ -81,6 +87,7 @@ class LogoutController extends Controller {
         if ($loginRedirect == null) {
             $loginRedirect = \OC_Util::getDefaultPageUrl();
         }
+
         return $loginRedirect;
     }
 
@@ -97,7 +104,7 @@ class LogoutController extends Controller {
             $ssoPage = $discovery['logout_endpoint'];
             $this->logger->debug("Logout with endpoint " . $ssoPage);
             if (!is_null($ssoPage)) {
-                return new RedirectResponse($ssoPage);
+                return new RedirectResponse($ssoPage . '?redirectURL=' . $this->defaultLoginPage());
             } else {
                 return new RedirectResponse($this->defaultLoginPage());
             }
@@ -127,7 +134,7 @@ class LogoutController extends Controller {
         // TODO: for now, we only support logout with 'Telekom' provider
         $response = $this->ssoLogoutPage();
 
-		if (!$this->request->isUserAgent([Request::USER_AGENT_CHROME, Request::USER_AGENT_ANDROID_MOBILE_CHROME])) {
+		if (!$this->request->isUserAgent([self::USER_AGENT_CHROME, self::USER_AGENT_ANDROID_MOBILE_CHROME])) {
 			$response->addHeader('Clear-Site-Data', '"cache", "storage"');
 		}
         return $response;
@@ -136,6 +143,7 @@ class LogoutController extends Controller {
 	/**
 	 * @PublicPage
 	 * @NoCSRFRequired
+     * @NoAdminRequired
 	 */
 	public function logout($logoutToken = '') {
         // TODO: we have no real usecase for Backchannel logout yet.
