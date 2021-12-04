@@ -144,8 +144,10 @@ class LogoutController extends Controller {
 	 * @PublicPage
 	 * @NoCSRFRequired
      * @NoAdminRequired
+     * 
+     * @param string $logout_token
 	 */
-	public function logout($logoutToken = '') {
+	public function logout($logout_token = '') {
         // TODO: we have no real usecase for Backchannel logout yet.
 
         // If we need to implement it, we have to catch the session_token from OepID web login
@@ -155,7 +157,7 @@ class LogoutController extends Controller {
         // for details, see 
         // https://accounts.login.idm.telekom.com/devguide/telekom_login/OpenIDConnectBackChannelLogout.html
         // tbs2014/tbs2014
-        $this->logger->debug("Backchannel logout received: " . $logoutToken);
+        $this->logger->debug("Backchannel logout received: " . $logout_token);
         return new JSONResponse();  
 	}
 }
