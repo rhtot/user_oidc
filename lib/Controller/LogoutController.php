@@ -33,6 +33,7 @@ use OCA\UserOIDC\Controller\LoginController;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\ILogger;
 use OCP\IRequest;
@@ -144,8 +145,10 @@ class LogoutController extends Controller {
 	 * @PublicPage
 	 * @NoCSRFRequired
      * @NoAdminRequired
+     * 
+     * @param string $logout_token
 	 */
-	public function logout($logoutToken = '') {
+	public function logout($logout_token = '') {
         // TODO: we have no real usecase for Backchannel logout yet.
 
         // If we need to implement it, we have to catch the session_token from OepID web login
@@ -156,6 +159,6 @@ class LogoutController extends Controller {
         // https://accounts.login.idm.telekom.com/devguide/telekom_login/OpenIDConnectBackChannelLogout.html
         // tbs2014/tbs2014
         $this->logger->debug("Backchannel logout received: " . $logoutToken);
-        return new JSONResponse();  
+        return new DataResponse();  
 	}
 }
