@@ -27,59 +27,66 @@ namespace OCA\UserOIDC\Service;
 
 use OCA\UserOIDC\Db\Provider;
 use OCA\UserOIDC\Vendor\Firebase\JWT\JWK;
+
+use OCP\ILogger;
+use OCP\ICacheFactory;
+use OCP\IMemCache;
 use OCP\Http\Client\IClientService;
-use Psr\Log\LoggerInterface;
 
 class DiscoveryService {
-	public const INVALIDATE_JWKS_CACHE_AFTER_SECONDS = 3600;
+	public const CACHE_EXPIRATION = 4 * 60 * 60;
+	public const CACHE_DISCOVERY = 'discovery';
+	public const CACHE_JWKS = 'jwks';
 
-    public const SETTING_JWKS_CACHE = 'jwksCache';
-	public const SETTING_JWKS_CACHE_TIMESTAMP = 'jwksCacheTimestamp';
+	/** @var IMemCache */
+	protected $cache;
 
-	/** @var LoggerInterface */
+	/** @var ILogger */
 	private $logger;
 
 	/** @var IClientService */
 	private $clientService;
-	/**
-	 * @var ProviderService
-	 */
-	private $providerService;
 
-	public function __construct(LoggerInterface $logger, IClientService $clientService, ProviderService $providerService) {
+	public function __construct(ILogger $logger,
+								IClientService $clientService,
+								ICacheFactory $cacheFactory) {
 		$this->logger = $logger;
 		$this->clientService = $clientService;
-		$this->providerService = $providerService;
+
+		$this->cache = $cacheFactory->createDistributed("user_oidc");
 	}
 
-	public function obtainDiscovery(Provider $provider): array {
-		$url = $provider->getDiscoveryEndpoint();
-		$client = $this->clientService->newClient();
+    /** for test purposes */
+    public function invalidateCache() {
+        $this->cache->remove(self::CACHE_DISCOVERY);
+        $this->cache->remove(self::CACHE_JWKS);
+    }
 
-		$this->logger->debug('Obtaining discovery endpoint: ' . $url);
-		$response = $client->get($url);
+	public function obtainDiscovery(Provider $provider, int $expire = self::CACHE_EXPIRATION): array {
+        $discovered = $this->cache->get(self::CACHE_DISCOVERY);
+        if ( $discovered == null ) {
+			$url = $provider->getDiscoveryEndpoint();
+			$this->logger->debug('Obtaining discovery endpoint: ' . $url);
 
-		return json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+			$client = $this->clientService->newClient();
+			$response = $client->get($url);
+			$discovered = $response->getBody();
+			$this->cache->set(self::CACHE_DISCOVERY, $discovered, $expire);
+		}
+		
+		return json_decode($discovered, true, 512, JSON_THROW_ON_ERROR);
 	}
 
-	public function obtainJWK(Provider $provider): array {
-		$lastJwksRefresh = $this->providerService->getSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE_TIMESTAMP);
-		if ($lastJwksRefresh !== '' && (int) $lastJwksRefresh > time() - self::INVALIDATE_JWKS_CACHE_AFTER_SECONDS) {
-			$rawJwks = $this->providerService->getSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE);
-			$rawJwks = json_decode($rawJwks, true);
-			$jwks = JWK::parseKeySet($rawJwks);
-		} else {
+	public function obtainJWK(Provider $provider, int $expire = self::CACHE_EXPIRATION): array {
+        $rawJwks = $this->cache->get(self::CACHE_JWKS);
+        if ( $rawJwks == null ) {
 			$discovery = $this->obtainDiscovery($provider);
 			$client = $this->clientService->newClient();
-			$responseBody = $client->get($discovery['jwks_uri'])->getBody();
-			$result = json_decode($responseBody, true);
-			$jwks = JWK::parseKeySet($result);
-			// cache jwks
-			$this->providerService->setSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE, $responseBody);
-			$this->providerService->setSetting($provider->getId(), ProviderService::SETTING_JWKS_CACHE_TIMESTAMP, strval(time()));
-		}
+			$rawJwks = $client->get($discovery['jwks_uri'])->getBody();
+			$this->cache->set(self::CACHE_JWKS, $rawJwks, $expire);
+        }
 
-		$this->logger->debug('Parsed the jwks');
-		return $jwks;
+        $jwks = json_decode($rawJwks, true);
+        return JWK::parseKeySet($jwks);
 	}
 }
