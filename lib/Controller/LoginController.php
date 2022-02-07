@@ -133,6 +133,9 @@ class LoginController extends Controller {
 	 * @UseSession
 	 */
 	public function login(int $providerId, string $redirectUrl = null) {
+		if ($this->userSession->isLoggedIn()) {
+			return new RedirectResponse($redirectUrl);
+		}
 		$this->logger->debug('Initiating login for provider with id: ' . $providerId);
 
 		//TODO: handle exceptions
@@ -211,6 +214,17 @@ class LoginController extends Controller {
 		$this->logger->debug('Redirecting user to: ' . $url);
 
 		return new RedirectResponse($url);
+	}
+
+
+	private function createEnhRedirectResponse($url) {
+		// Workaround to avoid empty session on special conditions in Safari
+		// https://github.com/nextcloud/user_oidc/pull/358
+		if ($this->request->isUserAgent(['/Safari/']) && !$this->request->isUserAgent(['/Chrome/'])) {
+			return new Http\DataDisplayResponse('<meta http-equiv="refresh" content="0; url=' . $url . '" />');
+		} else {
+			return new RedirectResponse($url);
+		}
 	}
 
 	/**
@@ -326,7 +340,7 @@ class LoginController extends Controller {
 		if ($userReaction->getRedirectUrl() != null) {
             // redirect determined by business event rules
             $this->logger->debug("{$uid}: Custom redirect to: " . $userReaction->getRedirectUrl() );
-            return new RedirectResponse($userReaction->getRedirectUrl());
+            return $this->createEnhRedirectResponse($userReaction->getRedirectUrl());
         } else if ($userReaction->isAccessAllowed()) {
             // positive default
             $successRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
@@ -334,7 +348,7 @@ class LoginController extends Controller {
                 $successRedirect = \OC_Util::getDefaultPageUrl();
             }
             $this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect );
-            return new RedirectResponse($successRedirect);
+            return $this->createEnhRedirectResponse($successRedirect);
         } else {
             // negative default
             return new JSONResponse([ $userReaction->getReason() ], Http::STATUS_UNAUTHORIZED);
