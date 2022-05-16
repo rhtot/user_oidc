@@ -125,7 +125,7 @@ class Backend extends ABackend implements IPasswordConfirmationBackend, IGetDisp
 		try {
 			$user = $this->userMapper->getUser($uid);
 		} catch (DoesNotExistException $e) {
-			return $uid;
+			return "user.unknown";
 		}
 
 		return $user->getDisplayName();
