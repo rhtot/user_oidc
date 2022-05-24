@@ -39,6 +39,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
+use OCP\AppFramework\DataDisplayResponse;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IClient;
@@ -84,7 +85,7 @@ class LoginControllerRedirectTest extends TestCase {
                             ->getMock();
         $this->session = $this->getMockForAbstractClass(ISession::class);
         $this->client = $this->getMockForAbstractClass(IClient::class);
-		$this->response = $this->getMockForAbstractClass(IResponse::class);
+		//$this->response = $this->getMockForAbstractClass(IResponse::class);
         $this->clientService = $this->getMockForAbstractClass(IClientService::class);
         $this->usersession = $this->getMockForAbstractClass(IUserSession::class);
         $this->usermanager = $this->getMockForAbstractClass(IUserManager::class);
@@ -154,6 +155,8 @@ class LoginControllerRedirectTest extends TestCase {
 
         $response = $this->loginController->login(99, "https://wherever.you.go");
         $this->assertInstanceOf(RedirectResponse::class, $response);
+        //fwrite(STDERR, $response->getRedirectURL());
+        $this->assertStringContainsString('https://whatever.to.discover/authorisation', $response->getRedirectURL());
         $this->assertNotInstanceOf(Http\DataDisplayResponse::class, $response);    
     }
 
@@ -176,8 +179,11 @@ class LoginControllerRedirectTest extends TestCase {
 
 
         $response = $this->loginController->login(99, "https://wherever.you.go");
+        //fwrite(STDERR, $response->getData());
         $this->assertNotInstanceOf(RedirectResponse::class, $response);
-        $this->assertInstanceOf(Http\DataDisplayResponse::class, $response);    
+        $this->assertInstanceOf(Http\DataDisplayResponse::class, $response); 
+        $this->assertStringContainsString('http-equiv="refresh"', $response->getData());
+        $this->assertStringContainsString('url=https://whatever.to.discover/authorisation', $response->getData());
     }
 
     /*
