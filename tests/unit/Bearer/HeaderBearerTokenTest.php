@@ -30,6 +30,8 @@ use OCA\UserOIDC\TestHelper\TokenTestCase;
 use OCP\ILogger;
 use OCP\IRequest;
 use OCP\IConfig;
+use OCP\IURLGenerator;
+
 
 use OCA\UserOIDC\AppInfo\Application;
 
@@ -135,6 +137,7 @@ class HeaderBearerTokenTest extends TokenTestCase {
 
 		$this->backend = new Backend($app->getContainer()->get(ILogger::class),
 								$this->requestMock,
+								$app->getContainer()->get(IURLGenerator::class),
 								$this->providerMapper,
 								$this->providerService,
 								$app->getContainer()->get(UserMapper::class),
