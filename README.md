@@ -90,8 +90,6 @@ Requirements for building:
 The app uses [krankerl](https://github.com/ChristophWurst/krankerl) to build the release archive from the git repository.
 The release will be put into `build/artifacts/` when running the `krankerl package`.
 
-IT IS NOT RECOMMENDED TO BUILD THE TELEKOM VERSION WITH KRANKERL AS IT DELETES WILDLY src DIRECTORIES in vendor dir
-
 The app can also be built without krankerl by manually running:
 ```
 composer install --no-dev -o

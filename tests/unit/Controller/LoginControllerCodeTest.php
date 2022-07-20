@@ -27,6 +27,7 @@ use OCA\UserOIDC\Controller\LoginController;
 use OCA\UserOIDC\Event\AttributeMappedEvent;
 use OCA\UserOIDC\Event\TokenObtainedEvent;
 use OCA\UserOIDC\Event\UserAccountChangeEvent;
+use OCA\UserOIDC\Event\UserAccountChangeResult;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
@@ -35,11 +36,11 @@ use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Db\Provider;
+use OCA\UserOIDC\Db\UserMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
-use OCP\AppFramework\DataDisplayResponse;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IClient;
@@ -57,6 +58,8 @@ use OCP\Security\ISecureRandom;
 
 use OCP\AppFramework\App;
 
+use OCA\UserOIDC\TestHelper\OidTokenTestCase;
+
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -65,7 +68,7 @@ use PHPUnit\Framework\TestCase;
  *
  * @group Services
  */
-class LoginControllerRedirectTest extends TestCase {
+class LoginControllerCodeTest extends OidTokenTestCase {
 
 	public function setUp(): void {
 		parent::setUp();
@@ -78,14 +81,26 @@ class LoginControllerRedirectTest extends TestCase {
                             ->setConstructorArgs([ $this->app->getContainer()->get(IConfig::class),
                                                    $this->providerMapper])
 							->getMock();        
+        $this->userMapper = $this->getMockBuilder(UserMapper::class)
+                            ->setConstructorArgs([ $this->getMockForAbstractClass(IDBConnection::class),
+                                                   $this->providerService ])
+							->getMock();
         $this->discoveryService = $this->getMockBuilder(DiscoveryService::class)
                             ->setConstructorArgs([ $this->app->getContainer()->get(ILogger::class),
                                                     $this->getMockForAbstractClass(IClientService::class),
                                                     $this->app->getContainer()->get(ICacheFactory::class) ])
                             ->getMock();
+        $this->userService = $this->getMockBuilder(UserService::class)
+                            ->setConstructorArgs([ $this->app->getContainer()->get(IEventDispatcher::class),
+                                                   $this->app->getContainer()->get(ILogger::class),
+                                                   $this->userMapper,
+                                                   $this->app->getContainer()->get(IUserManager::class),
+                                                   $this->providerService])
+							->getMock();        
+
         $this->session = $this->getMockForAbstractClass(ISession::class);
         $this->client = $this->getMockForAbstractClass(IClient::class);
-		//$this->response = $this->getMockForAbstractClass(IResponse::class);
+		$this->response = $this->getMockForAbstractClass(IResponse::class);
         $this->clientService = $this->getMockForAbstractClass(IClientService::class);
         $this->usersession = $this->getMockForAbstractClass(IUserSession::class);
         $this->usermanager = $this->getMockForAbstractClass(IUserManager::class);
@@ -102,94 +117,93 @@ class LoginControllerRedirectTest extends TestCase {
                             $this->usermanager,
                             $this->app->getContainer()->get(IEventDispatcher::class),
                             $this->app->getContainer()->get(ILogger::class));
-    }
 
-
-    protected function setupFullLoginSequence() {
-
+        $this->session->expects($this->at(0))
+            ->method('get')
+            ->with($this->equalTo('oidc.state'))
+            ->willReturn($this->getOidTestState());
         // mock behavior that is equal for all cases
         $provider = $this->getMockBuilder(Provider::class)
-            ->addMethods(['getClientId', 'getScope'])
+            ->addMethods(['getClientId', 'getClientSecret', 'getScope'])
             ->getMock();
-        $provider->expects($this->once())
+        $provider->expects($this->any())
                 ->method('getClientId')
-                ->willReturn('UnitTestProvider');
+                ->willReturn($this->getOidClientId());
         $provider->expects($this->once())
-                ->method('getScope')
-                ->willReturn('[openid]');
+                ->method('getClientSecret')
+                ->willReturn($this->getOidClientSecret());
+        //$provider->expects($this->once())
+        //        ->method('getScope')
+        //        ->willReturn('[openid]');
+        $this->session->expects($this->at(1))
+                ->method('get')
+                ->with($this->equalTo('oidc.providerid'))
+                ->willReturn($this->getProviderId());
         $this->providerMapper->expects($this->once())
-                            ->method('getProvider')
-                            ->willReturn($provider);
+                ->method('getProvider')
+                ->with($this->equalTo($this->getProviderId()))
+                ->willReturn($provider);
 
         $this->discoveryService->expects($this->once())
-                ->method('obtainDiscovery')
-                ->willReturn( array( 'authorization_endpoint' => 'https://whatever.to.discover/authorisation' ) );
-    }
-
-	public function testLoggedInRedirect() {
-        $this->usersession->expects($this->once())
-            ->method('isLoggedIn')
-            ->willReturn(true);
+                            ->method('obtainDiscovery')
+                            ->willReturn( array( 'token_endpoint' => 'https://whatever.to.discover/token' ) );
+        // here is where the token magic comes in
+        $this->tokenResponse = $this->getMockForAbstractClass(IResponse::class);
+        $this->token = array( 'id_token' => 
+                            $this->createSignToken($this->getRealOidClaims(),
+                                                    $this->getOidServerKey()));
         
-        $this->request->expects($this->never())
-            ->method('isUserAgent');
-        
-        $response = $this->loginController->login(99, "https://wherever.you.go");
-        $this->assertInstanceOf(RedirectResponse::class, $response);
-        $this->assertNotInstanceOf(Http\DataDisplayResponse::class, $response);       
-    }
+        // mock token check
+        //fwrite(STDERR, json_encode($this->token));
+        $this->tokenResponse->expects($this->once())
+                   ->method("getBody")
+                   ->willReturn(json_encode($this->token));    
+        $this->discoveryService->expects($this->once())
+                   ->method('obtainJWK')
+                   ->willReturn($this->getOidPublicServerKey());
 
-
-	public function testLoginRedirect() {
-        $this->setupFullLoginSequence();
-
-        $this->usersession->expects($this->once())
-            ->method('isLoggedIn')
-            ->willReturn(false);
-
-        $this->request->expects($this->once())
-            ->method('isUserAgent')
-            ->with($this->equalTo(['/Safari/']))
-            ->willReturn(false);
-
-
-        $response = $this->loginController->login(99, "https://wherever.you.go");
-        $this->assertInstanceOf(RedirectResponse::class, $response);
-        //fwrite(STDERR, $response->getRedirectURL());
-        $this->assertStringContainsString('https://whatever.to.discover/authorisation', $response->getRedirectURL());
-        $this->assertNotInstanceOf(Http\DataDisplayResponse::class, $response);    
+        $this->client = $this->getMockForAbstractClass(IClient::class); 
+        $this->clientService->expects($this->once())
+                    ->method("newClient")
+                    ->willReturn($this->client);    
+        $this->client->expects($this->once())
+                   ->method("post")
+                   ->with($this->equalTo('https://whatever.to.discover/token'),$this->arrayHasKey('body'))
+                   ->willReturn($this->tokenResponse);
+        $this->session->expects($this->at(2))
+                   ->method('get')
+                   ->with($this->equalTo('oidc.nonce'))
+                   ->willReturn($this->getOidNonce());
     }
 
     
-	public function testLoginRedirectSafari() {
-        $this->setupFullLoginSequence();
+	public function testCodeDefaultRedirect() {
+        $token = $this->getRealOidClaims();
 
-        $this->usersession->expects($this->once())
-            ->method('isLoggedIn')
-            ->willReturn(false);
+        $this->userService->expects($this->at(0))
+                ->method("determineUID")
+                ->willReturn($token["sub"]);
+        $this->userService->expects($this->at(1))
+                ->method("determineDisplayname")
+                ->willReturn($token["urn:custom.com:displayname"]);
+        $this->userService->expects($this->at(2))
+                ->method("determineEmail")
+                ->willReturn($token["urn:custom.com:email"]);
+        $this->userService->expects($this->at(3))
+                ->method("determineQuota")
+                ->willReturn("500GB");
+        $this->userService->expects($this->at(4))
+                ->method("changeUserAccount")
+                ->willReturn(new UserAccountChangeResult(true, "Authorized", null));
+        $this->loginController->code( $this->getOidTestState(),
+                                      $this->getOidTestCode(), 
+                                      '');
 
-        $this->request->expects($this->at(0))
-            ->method('isUserAgent')
-            ->with($this->equalTo(['/Safari/']))
-            ->willReturn(true);
-        $this->request->expects($this->at(1))
-            ->method('isUserAgent')
-            ->with($this->equalTo(['/Chrome/']))
-            ->willReturn(false);
 
 
-        $response = $this->loginController->login(99, "https://wherever.you.go");
-        //fwrite(STDERR, $response->getData());
-        $this->assertNotInstanceOf(RedirectResponse::class, $response);
-        $this->assertInstanceOf(Http\DataDisplayResponse::class, $response); 
-        $this->assertStringContainsString('http-equiv="refresh"', $response->getData());
-        $this->assertStringContainsString('url=https://whatever.to.discover/authorisation', $response->getData());
     }
 
     /*
-	public function testCodeDefaultRedirect() {
-	}
-
 	public function testCodeProf() {
 	} */
 }

@@ -37,7 +37,6 @@ use OCA\UserOIDC\Service\InvalidTokenException;
 use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
 use OCA\UserOIDC\AppInfo\Application;
 use OCA\UserOIDC\Db\ProviderMapper;
-use OCA\UserOIDC\Db\UserMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
@@ -70,9 +69,6 @@ class LoginController extends Controller {
 	/** @var IURLGenerator */
 	private $urlGenerator;
 
-	/** @var UserMapper */
-	private $userMapper;
-
 	/** @var IUserSession */
 	private $userSession;
 
@@ -104,7 +100,6 @@ class LoginController extends Controller {
 		ISession $session,
 		IClientService $clientService,
 		IURLGenerator $urlGenerator,
-		UserMapper $userMapper,
 		IUserSession $userSession,
 		IUserManager $userManager,
 		IEventDispatcher $eventDispatcher,
@@ -118,7 +113,6 @@ class LoginController extends Controller {
 		$this->userService = $userService;
 		$this->discoveryService = $discoveryService;
 		$this->urlGenerator = $urlGenerator;
-		$this->userMapper = $userMapper;
 		$this->userSession = $userSession;
 		$this->userManager = $userManager;
 		$this->providerMapper = $providerMapper;
@@ -209,23 +203,20 @@ class LoginController extends Controller {
 		}
 
 		//TODO verify discovery
-
 		$url = $discovery['authorization_endpoint'] . '?' . http_build_query($data);
 		$this->logger->debug('Redirecting user to: ' . $url);
-
-		return new RedirectResponse($url);
-	}
-
-
-	private function createEnhRedirectResponse($url) {
-		// Workaround to avoid empty session on special conditions in Safari
+		
+        // Workaround to avoid empty session on special conditions in Safari
 		// https://github.com/nextcloud/user_oidc/pull/358
+        // it is only relevant for the login case, not in general
 		if ($this->request->isUserAgent(['/Safari/']) && !$this->request->isUserAgent(['/Chrome/'])) {
 			return new Http\DataDisplayResponse('<meta http-equiv="refresh" content="0; url=' . $url . '" />');
 		} else {
 			return new RedirectResponse($url);
 		}
 	}
+
+
 
 	/**
 	 * @PublicPage
@@ -285,7 +276,7 @@ class LoginController extends Controller {
 		// For details:
 		// @see https://github.com/firebase/php-jwt
 		// the nonce is used to associate the token to the previous redirect
-		if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
+        if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
 			$this->logger->debug('Nonce does not match');
 			// TODO: error properly
 			return new JSONResponse(['invalid nonce'], Http::STATUS_UNAUTHORIZED);
@@ -300,28 +291,11 @@ class LoginController extends Controller {
 		// TODO: may also add code_verifier
  		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
 
-		// NextMagentaCloud: at the moment not a good idea for SAM3
-		// if something is missing from the token, get user info from /userinfo endpoint
-		// FIXME: only when attribute mapping is set or optional
-		// if (is_null($userId) || is_null($userName) || is_null($email) || is_null($quota)) {
-		// 	$options = [
-		// 		'headers' => [
-		// 			'Authorization' => 'Bearer ' . $data['access_token'],
-		// 		],
-		// 	];
-		// 	$userInfoResult = json_decode($client->get($discovery['userinfo_endpoint'], $options)->getBody(), true);
-		// 	$userId = $userId ?? $userInfoResult[$uidAttribute] ?? null;
-		// 	$userName = $userName ?? $userInfoResult[$displaynameAttribute] ?? null;
-		// 	$email = $email ?? $userInfoResult[$emailAttribute] ?? null;
-		// 	$quota = $quota ?? $userInfoResult[$quotaAttribute] ?? null;
-		// }
-
 		try {
 	     	$uid = $this->userService->determineUID($providerId, $payload);
 	        $displayname = $this->userService->determineDisplayname($providerId, $payload);
 	        $email = $this->userService->determineEmail($providerId, $payload);
          	$quota = $this->userService->determineQuota($providerId, $payload);
-			//$user = $this->userService->userFromToken($provider, $payload);
 		} catch (AttributeValueException $eAttribute) {
 			return new JSONResponse($eAttribute->getMessage(), Http::STATUS_NOT_ACCEPTABLE);
 		}
@@ -333,6 +307,7 @@ class LoginController extends Controller {
 			$this->userSession->setUser($user);
 			$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
 			$this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
+            $this->userSession->createRememberMeToken($user);
         } else {
             $this->logger->info("{$uid}: user rejected by OpenId web authorization, reason: " . $userReaction->getReason() );
         }
@@ -340,7 +315,7 @@ class LoginController extends Controller {
 		if ($userReaction->getRedirectUrl() != null) {
             // redirect determined by business event rules
             $this->logger->debug("{$uid}: Custom redirect to: " . $userReaction->getRedirectUrl() );
-            return $this->createEnhRedirectResponse($userReaction->getRedirectUrl());
+            return new RedirectResponse($userReaction->getRedirectUrl());
         } else if ($userReaction->isAccessAllowed()) {
             // positive default
             $successRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
@@ -348,7 +323,7 @@ class LoginController extends Controller {
                 $successRedirect = \OC_Util::getDefaultPageUrl();
             }
             $this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect );
-            return $this->createEnhRedirectResponse($successRedirect);
+            return new RedirectResponse($userReaction->getRedirectUrl());
         } else {
             // negative default
             return new JSONResponse([ $userReaction->getReason() ], Http::STATUS_UNAUTHORIZED);
