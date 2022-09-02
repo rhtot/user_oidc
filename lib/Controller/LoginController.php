@@ -89,7 +89,7 @@ class LoginController extends Controller {
 
 	/** @var DiscoveryService */
 	private $discoveryService;
-	
+
 	public function __construct(
 		IRequest $request,
 		ProviderMapper $providerMapper,
@@ -205,7 +205,7 @@ class LoginController extends Controller {
 		//TODO verify discovery
 		$url = $discovery['authorization_endpoint'] . '?' . http_build_query($data);
 		$this->logger->debug('Redirecting user to: ' . $url);
-		
+
         // Workaround to avoid empty session on special conditions in Safari
 		// https://github.com/nextcloud/user_oidc/pull/358
         // it is only relevant for the login case, not in general
@@ -323,6 +323,8 @@ class LoginController extends Controller {
                 $successRedirect = \OC_Util::getDefaultPageUrl();
             }
             $this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect );
+			header('Location: ' . $successRedirect);
+			exit();
             return new RedirectResponse($userReaction->getRedirectUrl());
         } else {
             // negative default
