@@ -5,38 +5,29 @@
 declare(strict_types=1);
 /**
  * @copyright Copyright (c) 2020, Roeland Jago Douma <roeland@famdouma.nl>
- *
  * @author Roeland Jago Douma <roeland@famdouma.nl>
- *
  * @license GNU AGPL version 3 or any later version
- *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
- *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 
 namespace OCA\UserOIDC\Controller;
 
-use OCA\UserOIDC\Event\AttributeMappedEvent;
+use OCA\UserOIDC\AppInfo\Application;
+use OCA\UserOIDC\Db\ProviderMapper;
 use OCA\UserOIDC\Event\TokenObtainedEvent;
-use OCA\UserOIDC\Event\UserAccountChangeEvent;
 use OCA\UserOIDC\Service\DiscoveryService;
 use OCA\UserOIDC\Service\ProviderService;
 use OCA\UserOIDC\Service\UserService;
-use OCA\UserOIDC\Service\InvalidTokenException;
 use OCA\UserOIDC\Vendor\Firebase\JWT\JWT;
-use OCA\UserOIDC\AppInfo\Application;
-use OCA\UserOIDC\Db\ProviderMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
@@ -51,7 +42,8 @@ use OCP\IUserManager;
 use OCP\IUserSession;
 use OCP\Security\ISecureRandom;
 
-class LoginController extends Controller {
+class LoginController extends Controller
+{
 	private const STATE = 'oidc.state';
 	private const NONCE = 'oidc.nonce';
 	private const PROVIDERID = 'oidc.providerid';
@@ -91,20 +83,21 @@ class LoginController extends Controller {
 	private $discoveryService;
 
 	public function __construct(
-		IRequest $request,
-		ProviderMapper $providerMapper,
-		ProviderService $providerService,
-		UserService $userService,
+		IRequest         $request,
+		ProviderMapper   $providerMapper,
+		ProviderService  $providerService,
+		UserService      $userService,
 		DiscoveryService $discoveryService,
-		ISecureRandom $random,
-		ISession $session,
-		IClientService $clientService,
-		IURLGenerator $urlGenerator,
-		IUserSession $userSession,
-		IUserManager $userManager,
+		ISecureRandom    $random,
+		ISession         $session,
+		IClientService   $clientService,
+		IURLGenerator    $urlGenerator,
+		IUserSession     $userSession,
+		IUserManager     $userManager,
 		IEventDispatcher $eventDispatcher,
-		ILogger $logger
-	) {
+		ILogger          $logger
+	)
+	{
 		parent::__construct(Application::APP_ID, $request);
 
 		$this->random = $random;
@@ -126,7 +119,8 @@ class LoginController extends Controller {
 	 * @NoCSRFRequired
 	 * @UseSession
 	 */
-	public function login(int $providerId, string $redirectUrl = null) {
+	public function login(int $providerId, string $redirectUrl = null)
+	{
 		if ($this->userSession->isLoggedIn()) {
 			return new RedirectResponse($redirectUrl);
 		}
@@ -206,9 +200,9 @@ class LoginController extends Controller {
 		$url = $discovery['authorization_endpoint'] . '?' . http_build_query($data);
 		$this->logger->debug('Redirecting user to: ' . $url);
 
-        // Workaround to avoid empty session on special conditions in Safari
+		// Workaround to avoid empty session on special conditions in Safari
 		// https://github.com/nextcloud/user_oidc/pull/358
-        // it is only relevant for the login case, not in general
+		// it is only relevant for the login case, not in general
 		if ($this->request->isUserAgent(['/Safari/']) && !$this->request->isUserAgent(['/Chrome/'])) {
 			return new Http\DataDisplayResponse('<meta http-equiv="refresh" content="0; url=' . $url . '" />');
 		} else {
@@ -217,13 +211,13 @@ class LoginController extends Controller {
 	}
 
 
-
 	/**
 	 * @PublicPage
 	 * @NoCSRFRequired
 	 * @UseSession
 	 */
-	public function code($state = '', $code = '', $scope = '') {
+	public function code($state = '', $code = '', $scope = '')
+	{
 		$this->logger->debug('Code login with core: ' . $code . ' and state: ' . $state);
 
 		if ($this->session->get(self::STATE) !== $state) {
@@ -276,7 +270,7 @@ class LoginController extends Controller {
 		// For details:
 		// @see https://github.com/firebase/php-jwt
 		// the nonce is used to associate the token to the previous redirect
-        if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
+		if (isset($payload->nonce) && $payload->nonce !== $this->session->get(self::NONCE)) {
 			$this->logger->debug('Nonce does not match');
 			// TODO: error properly
 			return new JSONResponse(['invalid nonce'], Http::STATUS_UNAUTHORIZED);
@@ -289,44 +283,44 @@ class LoginController extends Controller {
 		}
 
 		// TODO: may also add code_verifier
- 		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
+		$this->logger->debug('Parsed the JWT payload: ' . json_encode($payload, JSON_THROW_ON_ERROR));
 
 		try {
-	     	$uid = $this->userService->determineUID($providerId, $payload);
-	        $displayname = $this->userService->determineDisplayname($providerId, $payload);
-	        $email = $this->userService->determineEmail($providerId, $payload);
-         	$quota = $this->userService->determineQuota($providerId, $payload);
+			$uid = $this->userService->determineUID($providerId, $payload);
+			$displayname = $this->userService->determineDisplayname($providerId, $payload);
+			$email = $this->userService->determineEmail($providerId, $payload);
+			$quota = $this->userService->determineQuota($providerId, $payload);
 		} catch (AttributeValueException $eAttribute) {
 			return new JSONResponse($eAttribute->getMessage(), Http::STATUS_NOT_ACCEPTABLE);
 		}
 
-        $userReaction = $this->userService->changeUserAccount($uid, $displayname, $email, $quota, $payload);
+		$userReaction = $this->userService->changeUserAccount($uid, $displayname, $email, $quota, $payload);
 		if ($userReaction->isAccessAllowed()) {
-            $this->logger->info("{$uid}: user accepted by OpenId web authorization, reason: " . $userReaction->getReason() );
+			$this->logger->info("{$uid}: user accepted by OpenId web authorization, reason: " . $userReaction->getReason());
 			$user = $this->userManager->get($uid);
 			$this->userSession->setUser($user);
 			$this->userSession->completeLogin($user, ['loginName' => $user->getUID(), 'password' => '']);
 			$this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID());
-            $this->userSession->createRememberMeToken($user);
-        } else {
-            $this->logger->info("{$uid}: user rejected by OpenId web authorization, reason: " . $userReaction->getReason() );
-        }
+			$this->userSession->createRememberMeToken($user);
+		} else {
+			$this->logger->info("{$uid}: user rejected by OpenId web authorization, reason: " . $userReaction->getReason());
+		}
 
 		if ($userReaction->getRedirectUrl() != null) {
-            // redirect determined by business event rules
-            $this->logger->debug("{$uid}: Custom redirect to: " . $userReaction->getRedirectUrl() );
-            return new RedirectResponse($userReaction->getRedirectUrl());
-        } else if ($userReaction->isAccessAllowed()) {
-            // positive default
-            $successRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
-            if ($successRedirect == null) {
-                $successRedirect = \OC_Util::getDefaultPageUrl();
-            }
-            $this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect );
-            return new RedirectResponse($successRedirect);
-        } else {
-            // negative default
-            return new JSONResponse([ $userReaction->getReason() ], Http::STATUS_UNAUTHORIZED);
-        }
+			// redirect determined by business event rules
+			$this->logger->debug("{$uid}: Custom redirect to: " . $userReaction->getRedirectUrl());
+			return new RedirectResponse($userReaction->getRedirectUrl());
+		} else if ($userReaction->isAccessAllowed()) {
+			// positive default
+			$successRedirect = $this->session->get(self::REDIRECT_AFTER_LOGIN);
+			if ($successRedirect == null) {
+				$successRedirect = \OC_Util::getDefaultPageUrl();
+			}
+			$this->logger->debug("{$uid}: Standard redirect to: " . $successRedirect);
+			return new RedirectResponse($successRedirect);
+		} else {
+			// negative default
+			return new JSONResponse([$userReaction->getReason()], Http::STATUS_UNAUTHORIZED);
+		}
 	}
 }
