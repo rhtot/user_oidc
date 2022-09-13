@@ -35,6 +35,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\RedirectResponse;
+use OCP\IConfig;
 use OCP\ILogger;
 use OCP\IRequest;
 use OCP\ISession;
@@ -64,6 +65,10 @@ class LogoutController extends Controller {
 
 	/** @var DiscoveryService */
 	private $discoveryService;
+	/**
+	 * @var IConfig
+	 */
+	private $config;
 
 
 	public function __construct(
@@ -72,7 +77,8 @@ class LogoutController extends Controller {
         ISession $session,
         IUserSession $userSession,
         ProviderService $providerService,
-		DiscoveryService $discoveryService
+		DiscoveryService $discoveryService,
+		IConfig $config
 	) {
 		parent::__construct(Application::APP_ID, $request);
 
@@ -81,6 +87,7 @@ class LogoutController extends Controller {
         $this->userSession = $userSession;
         $this->providerService = $providerService;
         $this->discoveryService = $discoveryService;
+		$this->config = $config;
 	}
 
     protected function defaultLoginPage() {
@@ -129,8 +136,7 @@ class LogoutController extends Controller {
 		}
 		$this->userSession->logout();
 
-		$this->session->set('clearingExecutionContexts', '1');
-		$this->session->close();
+		$this->session->clear();
 
         // TODO: for now, we only support logout with 'Telekom' provider
         $response = $this->ssoLogoutPage();
